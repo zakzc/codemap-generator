@@ -1,0 +1,33 @@
+{
+  "project": "lettore",
+  "ignore": ["sidecar/build/**", "src-tauri/binaries/**"],
+  "requestWrappers": [{ "name": "call", "method": "GET" }],
+  "hubFanIn": 10,
+  "featureDistance": 2,
+  "detail": { "full": ["src/player.ts"] },
+  "features": [
+    {
+      "id": "feature:document-loading",
+      "name": "Document loading",
+      "description": "Pick a PDF, parse it in the sidecar, store and render it.",
+      "seeds": ["sym:src/App.tsx#App", "endpoint:POST /parse"],
+      "keywords": ["pdf", "parse"],
+      "include": ["file:sidecar/chunker.py"],
+      "exclude": ["file:src/voices.ts"],
+      "roles": { "sym:src/PdfView.tsx#PdfView": "core" }
+    }
+  ],
+  "notes": {
+    "file:src/api.ts": "All sidecar HTTP goes through get(); it adds the X-Token header."
+  },
+  "edges": [
+    {
+      "from": "sym:src/player.ts#play",
+      "to": "endpoint:WS /speak",
+      "kind": "requests",
+      "note": "URL comes from speakUrl(), so the scanner cannot match it"
+    }
+  ],
+  "tools": { "kokoro-js": "ml" },
+  "history": { "refPatterns": ["\\bM\\d+(\\.\\d+)?\\b"] }
+}

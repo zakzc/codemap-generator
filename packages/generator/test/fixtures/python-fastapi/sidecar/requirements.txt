@@ -1,0 +1,4 @@
+fastapi>=0.110
+pymupdf==1.24
+uvicorn[standard]
+# comment

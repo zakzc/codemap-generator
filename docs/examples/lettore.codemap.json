@@ -1,0 +1,144 @@
+{
+  "format": "codemap/1",
+  "generator": {
+    "name": "codemap",
+    "version": "0.0.0-handwritten",
+    "generatedAt": "2026-11-26T10:00:00Z"
+  },
+  "project": {
+    "name": "lettore",
+    "root": ".",
+    "commit": null,
+    "languages": ["python", "rust", "typescript"],
+    "entrypoints": ["file:sidecar/main.py", "file:src-tauri/src/main.rs", "file:src/main.tsx"]
+  },
+  "tools": [
+    {"category": "http-server", "nodes": ["ext:pip:fastapi"]},
+    {"category": "ipc", "nodes": ["ext:npm:@tauri-apps/api"]},
+    {"category": "media", "nodes": ["ext:npm:pdfjs-dist", "ext:pip:pymupdf"]},
+    {"category": "state", "nodes": ["ext:npm:@reduxjs/toolkit", "ext:npm:react-redux"]}
+  ],
+  "features": [
+    {
+      "id": "feature:document-loading",
+      "name": "Document loading",
+      "description": "Pick a PDF, parse it in the sidecar, store and render it.",
+      "source": "config",
+      "seeds": ["endpoint:POST /parse", "sym:src/App.tsx#App"],
+      "members": [
+        {"node": "endpoint:POST /parse", "role": "core", "distance": 0},
+        {"node": "sym:src/App.tsx#App", "role": "entry", "distance": 0},
+        {"node": "file:sidecar/parse.py", "role": "core", "distance": 1},
+        {"node": "file:src/api.ts", "role": "shared", "distance": 1},
+        {"node": "sym:src/store.ts#documentSlice", "role": "core", "distance": 1},
+        {"node": "sym:src/PdfView.tsx#PdfView", "role": "core", "distance": 1},
+        {"node": "file:sidecar/chunker.py", "role": "support", "distance": 2, "origin": "user"}
+      ]
+    },
+    {
+      "id": "feature:endpoint-post-geometry",
+      "name": "POST /geometry",
+      "source": "endpoint",
+      "seeds": ["endpoint:POST /geometry"],
+      "members": [
+        {"node": "endpoint:POST /geometry", "role": "core", "distance": 0},
+        {"node": "file:src/PdfView.tsx", "role": "core", "distance": 1}
+      ]
+    },
+    {
+      "id": "feature:ref-m3-8",
+      "name": "M3.8",
+      "description": "M3.8: blue underline on the sentence being read",
+      "source": "history",
+      "commits": ["2e831858c92a"],
+      "members": [
+        {"node": "file:sidecar/chunker.py", "role": "core", "origin": "history", "commits": 1},
+        {"node": "file:sidecar/main.py", "role": "core", "origin": "history", "commits": 1},
+        {"node": "file:src/PdfView.tsx", "role": "core", "origin": "history", "commits": 1},
+        {"node": "file:src/player.ts", "role": "core", "origin": "history", "commits": 1},
+        {"node": "file:src/store.ts", "role": "shared", "origin": "history", "commits": 1}
+      ]
+    }
+  ],
+  "nodes": [
+    {"id": "command:tauri:sidecar_info", "kind": "command", "name": "sidecar_info", "parent": "file:src-tauri/src/lib.rs", "path": "src-tauri/src/lib.rs", "range": {"start": 18, "end": 22}, "lang": "rust", "meta": {"framework": "tauri"}},
+    {"id": "dir:src-tauri/src", "kind": "directory", "name": "src", "parent": "pkg:src-tauri", "path": "src-tauri/src"},
+    {"id": "endpoint:POST /geometry", "kind": "endpoint", "name": "POST /geometry", "parent": "file:sidecar/main.py", "path": "sidecar/main.py", "range": {"start": 210, "end": 230}, "lang": "python", "meta": {"method": "POST", "path": "/geometry", "framework": "fastapi", "auth": true}},
+    {"id": "endpoint:POST /parse", "kind": "endpoint", "name": "POST /parse", "parent": "file:sidecar/main.py", "path": "sidecar/main.py", "range": {"start": 178, "end": 196}, "lang": "python", "meta": {"method": "POST", "path": "/parse", "framework": "fastapi", "auth": true}},
+    {"id": "endpoint:WS /speak", "kind": "endpoint", "name": "WS /speak", "parent": "file:sidecar/main.py", "path": "sidecar/main.py", "range": {"start": 93, "end": 176}, "lang": "python", "meta": {"method": "WS", "path": "/speak", "framework": "fastapi"}},
+    {"id": "ext:npm:@reduxjs/toolkit", "kind": "external", "name": "@reduxjs/toolkit", "parent": "project:", "meta": {"ecosystem": "npm", "version": "^2.15.0", "category": "state"}},
+    {"id": "ext:npm:@tauri-apps/api", "kind": "external", "name": "@tauri-apps/api", "parent": "project:", "meta": {"ecosystem": "npm", "version": "^2", "category": "ipc"}},
+    {"id": "ext:npm:pdfjs-dist", "kind": "external", "name": "pdfjs-dist", "parent": "project:", "meta": {"ecosystem": "npm", "version": "^6.5.438", "category": "media"}},
+    {"id": "ext:npm:react-redux", "kind": "external", "name": "react-redux", "parent": "project:", "meta": {"ecosystem": "npm", "version": "^9.3.1", "category": "state"}},
+    {"id": "ext:pip:fastapi", "kind": "external", "name": "fastapi", "parent": "project:", "meta": {"ecosystem": "pip", "category": "http-server"}},
+    {"id": "ext:pip:pymupdf", "kind": "external", "name": "pymupdf", "parent": "project:", "meta": {"ecosystem": "pip", "category": "media"}},
+    {"id": "file:sidecar/chunker.py", "kind": "file", "name": "chunker.py", "parent": "pkg:sidecar", "path": "sidecar/chunker.py", "lang": "python", "metrics": {"loc": 77, "commits": 2}, "meta": {"lastChanged": "2026-11-24T19:38:59Z"}},
+    {"id": "file:sidecar/main.py", "kind": "file", "name": "main.py", "parent": "pkg:sidecar", "path": "sidecar/main.py", "lang": "python", "tags": ["entry"], "metrics": {"loc": 254, "fanIn": 0, "fanOut": 3, "commits": 4}, "meta": {"lastChanged": "2026-11-25T10:06:18Z"}},
+    {"id": "file:sidecar/parse.py", "kind": "file", "name": "parse.py", "parent": "pkg:sidecar", "path": "sidecar/parse.py", "lang": "python", "metrics": {"loc": 133, "fanIn": 1, "fanOut": 1, "commits": 1}, "meta": {"lastChanged": "2026-11-24T19:21:42Z"}},
+    {"id": "file:src-tauri/src/lib.rs", "kind": "file", "name": "lib.rs", "parent": "dir:src-tauri/src", "path": "src-tauri/src/lib.rs", "lang": "rust", "metrics": {"loc": 63, "commits": 2}, "meta": {"lastChanged": "2026-11-24T19:21:42Z"}},
+    {"id": "file:src-tauri/src/main.rs", "kind": "file", "name": "main.rs", "parent": "dir:src-tauri/src", "path": "src-tauri/src/main.rs", "lang": "rust", "tags": ["entry"], "metrics": {"commits": 1}, "meta": {"lastChanged": "2026-11-23T19:02:58Z"}},
+    {"id": "file:src/App.tsx", "kind": "file", "name": "App.tsx", "parent": "pkg:src", "path": "src/App.tsx", "lang": "typescript", "metrics": {"loc": 140, "fanIn": 1, "fanOut": 13, "hiddenSymbols": 2, "commits": 3}, "meta": {"lastChanged": "2026-11-25T10:06:18Z"}},
+    {"id": "file:src/PdfView.tsx", "kind": "file", "name": "PdfView.tsx", "parent": "pkg:src", "path": "src/PdfView.tsx", "lang": "typescript", "metrics": {"loc": 191, "fanIn": 1, "fanOut": 4, "hiddenSymbols": 1, "commits": 2}, "meta": {"lastChanged": "2026-11-24T19:38:59Z"}},
+    {"id": "file:src/api.ts", "kind": "file", "name": "api.ts", "parent": "pkg:src", "path": "src/api.ts", "lang": "typescript", "tags": ["hub"], "metrics": {"loc": 28, "fanIn": 3, "fanOut": 0, "commits": 1}, "note": "All sidecar HTTP goes through get(); it adds the X-Token header.", "meta": {"lastChanged": "2026-11-24T19:21:42Z"}},
+    {"id": "file:src/main.tsx", "kind": "file", "name": "main.tsx", "parent": "pkg:src", "path": "src/main.tsx", "lang": "typescript", "tags": ["entry"], "metrics": {"loc": 17, "fanIn": 0, "fanOut": 5, "commits": 2}, "meta": {"lastChanged": "2026-11-24T19:21:42Z"}},
+    {"id": "file:src/player.ts", "kind": "file", "name": "player.ts", "parent": "pkg:src", "path": "src/player.ts", "lang": "typescript", "metrics": {"hiddenSymbols": 4, "commits": 2}, "meta": {"lastChanged": "2026-11-24T19:38:59Z"}},
+    {"id": "file:src/store.ts", "kind": "file", "name": "store.ts", "parent": "pkg:src", "path": "src/store.ts", "lang": "typescript", "tags": ["hub"], "metrics": {"loc": 110, "fanIn": 10, "fanOut": 4, "commits": 2}, "meta": {"lastChanged": "2026-11-24T19:38:59Z"}},
+    {"id": "pkg:sidecar", "kind": "package", "name": "sidecar", "parent": "project:", "path": "sidecar", "lang": "python"},
+    {"id": "pkg:src", "kind": "package", "name": "frontend", "parent": "project:", "path": "src", "lang": "typescript"},
+    {"id": "pkg:src-tauri", "kind": "package", "name": "src-tauri", "parent": "project:", "path": "src-tauri", "lang": "rust"},
+    {"id": "project:", "kind": "project", "name": "lettore", "parent": null, "path": "."},
+    {"id": "sym:sidecar/parse.py#parse_pdf", "kind": "function", "name": "parse_pdf", "parent": "file:sidecar/parse.py", "path": "sidecar/parse.py", "range": {"start": 82, "end": 133}, "lang": "python", "exported": true, "meta": {"params": ["path"]}},
+    {"id": "sym:src/App.tsx#App", "kind": "component", "name": "App", "parent": "file:src/App.tsx", "path": "src/App.tsx", "range": {"start": 31, "end": 140}, "lang": "typescript", "exported": true, "meta": {"hooks": ["useAppDispatch", "useAppSelector", "useEffect", "useState"], "lazy": false, "entryDepth": 0}},
+    {"id": "sym:src/PdfView.tsx#PageView", "kind": "component", "name": "PageView", "parent": "file:src/PdfView.tsx", "path": "src/PdfView.tsx", "range": {"start": 25, "end": 100}, "lang": "typescript", "meta": {"lazy": false, "entryDepth": 2}},
+    {"id": "sym:src/PdfView.tsx#PdfView", "kind": "component", "name": "PdfView", "parent": "file:src/PdfView.tsx", "path": "src/PdfView.tsx", "range": {"start": 102, "end": 191}, "lang": "typescript", "exported": true, "meta": {"props": ["showTypes"], "hooks": ["useAppSelector", "useEffect", "useMemo", "useRef", "useState"], "lazy": false, "entryDepth": 1}},
+    {"id": "sym:src/api.ts#call", "kind": "function", "name": "call", "parent": "file:src/api.ts", "path": "src/api.ts", "range": {"start": 25, "end": 25}, "lang": "typescript", "exported": true, "meta": {"async": true, "params": ["path", "init"]}},
+    {"id": "sym:src/player.ts#play", "kind": "function", "name": "play", "parent": "file:src/player.ts", "path": "src/player.ts", "range": {"start": 50, "end": 108}, "lang": "typescript", "exported": true, "meta": {"params": ["fromBlockId"]}},
+    {"id": "sym:src/store.ts#documentSlice", "kind": "store", "name": "documentSlice", "parent": "file:src/store.ts", "path": "src/store.ts", "range": {"start": 12, "end": 37}, "lang": "typescript", "meta": {"framework": "redux", "actions": ["parseStarted"]}}
+  ],
+  "edges": [
+    {"from": "endpoint:POST /parse", "to": "sym:sidecar/parse.py#parse_pdf", "kind": "calls"},
+    {"from": "file:sidecar/main.py", "to": "file:src/App.tsx", "kind": "changes-with", "confidence": "heuristic", "count": 3},
+    {"from": "file:sidecar/main.py", "to": "ext:pip:fastapi", "kind": "imports", "at": [{"path": "sidecar/main.py", "line": 12}], "meta": {"names": ["Depends", "FastAPI", "Header", "HTTPException", "WebSocket", "WebSocketDisconnect"]}},
+    {"from": "file:sidecar/main.py", "to": "ext:pip:pymupdf", "kind": "imports", "at": [{"path": "sidecar/main.py", "line": 10}]},
+    {"from": "file:sidecar/main.py", "to": "file:sidecar/chunker.py", "kind": "imports", "at": [{"path": "sidecar/main.py", "line": 17}], "meta": {"names": ["chunk_blocks"]}},
+    {"from": "file:sidecar/main.py", "to": "file:sidecar/parse.py", "kind": "imports", "at": [{"path": "sidecar/main.py", "line": 18}], "meta": {"names": ["parse_pdf"]}},
+    {"from": "file:src/App.tsx", "to": "ext:npm:@tauri-apps/api", "kind": "imports", "at": [{"path": "src/App.tsx", "line": 2}], "meta": {"names": ["invoke"]}},
+    {"from": "file:src/App.tsx", "to": "file:src/PdfView.tsx", "kind": "imports", "at": [{"path": "src/App.tsx", "line": 9}], "meta": {"names": ["PdfView"]}},
+    {"from": "file:src/App.tsx", "to": "file:src/api.ts", "kind": "imports", "at": [{"path": "src/App.tsx", "line": 4}], "meta": {"names": ["SidecarInfo", "call", "errMsg", "setSidecar"]}},
+    {"from": "file:src/App.tsx", "to": "file:src/store.ts", "kind": "imports", "at": [{"path": "src/App.tsx", "line": 14}], "meta": {"names": ["doc", "playerActions", "uiActions", "useAppDispatch", "useAppSelector"]}},
+    {"from": "file:src/PdfView.tsx", "to": "ext:npm:pdfjs-dist", "kind": "imports", "count": 2, "at": [{"path": "src/PdfView.tsx", "line": 2}, {"path": "src/PdfView.tsx", "line": 3}]},
+    {"from": "file:src/PdfView.tsx", "to": "file:src/api.ts", "kind": "imports", "at": [{"path": "src/PdfView.tsx", "line": 4}], "meta": {"names": ["call", "errMsg", "fetchBytes"]}},
+    {"from": "file:src/PdfView.tsx", "to": "file:src/store.ts", "kind": "imports", "at": [{"path": "src/PdfView.tsx", "line": 6}], "meta": {"names": ["Page", "Span", "useAppSelector"]}},
+    {"from": "file:src/PdfView.tsx", "to": "endpoint:POST /geometry", "kind": "requests", "confidence": "heuristic", "at": [{"path": "src/PdfView.tsx", "line": 17}]},
+    {"from": "file:src/main.tsx", "to": "ext:npm:react-redux", "kind": "imports", "at": [{"path": "src/main.tsx", "line": 3}], "meta": {"names": ["Provider"]}},
+    {"from": "file:src/main.tsx", "to": "file:src/App.tsx", "kind": "imports", "at": [{"path": "src/main.tsx", "line": 4}], "meta": {"names": ["default"]}},
+    {"from": "file:src/main.tsx", "to": "file:src/store.ts", "kind": "imports", "at": [{"path": "src/main.tsx", "line": 6}], "meta": {"names": ["store"]}},
+    {"from": "file:src/store.ts", "to": "ext:npm:@reduxjs/toolkit", "kind": "imports", "at": [{"path": "src/store.ts", "line": 1}], "meta": {"names": ["PayloadAction", "configureStore", "createSlice"]}},
+    {"from": "file:src/store.ts", "to": "ext:npm:react-redux", "kind": "imports", "at": [{"path": "src/store.ts", "line": 4}]},
+    {"from": "sym:src/App.tsx#App", "to": "sym:src/api.ts#call", "kind": "calls", "count": 4},
+    {"from": "sym:src/App.tsx#App", "to": "sym:src/PdfView.tsx#PdfView", "kind": "renders"},
+    {"from": "sym:src/App.tsx#App", "to": "command:tauri:sidecar_info", "kind": "requests", "confidence": "exact", "at": [{"path": "src/App.tsx", "line": 47}]},
+    {"from": "sym:src/App.tsx#App", "to": "endpoint:POST /parse", "kind": "requests", "confidence": "heuristic", "at": [{"path": "src/App.tsx", "line": 78}]},
+    {"from": "sym:src/App.tsx#App", "to": "sym:src/store.ts#documentSlice", "kind": "writes", "at": [{"path": "src/App.tsx", "line": 76}]},
+    {"from": "sym:src/PdfView.tsx#PdfView", "to": "sym:src/store.ts#documentSlice", "kind": "reads"},
+    {"from": "sym:src/PdfView.tsx#PdfView", "to": "sym:src/PdfView.tsx#PageView", "kind": "renders"},
+    {"from": "sym:src/player.ts#play", "to": "endpoint:WS /speak", "kind": "requests", "confidence": "manual", "meta": {"note": "URL comes from speakUrl(), so the scanner cannot match it"}}
+  ],
+  "rollups": [
+    {"from": "pkg:src", "to": "pkg:sidecar", "kind": "requests", "count": 3},
+    {"from": "pkg:src", "to": "pkg:src-tauri", "kind": "requests", "count": 1}
+  ],
+  "history": {
+    "scanned": 6,
+    "truncated": false,
+    "commits": [
+      {"hash": "2784ec44a3a2", "date": "2026-11-25T10:06:18Z", "subject": "M4: first-run model download with progress; packaging status (SPEC §8 M4)", "files": ["file:sidecar/main.py", "file:src/App.tsx"]},
+      {"hash": "2e831858c92a", "date": "2026-11-24T19:38:59Z", "subject": "M3.8: blue underline on the sentence being read", "files": ["file:sidecar/chunker.py", "file:sidecar/main.py", "file:src/PdfView.tsx", "file:src/player.ts", "file:src/store.ts"]},
+      {"hash": "b34c5e542640", "date": "2026-11-24T19:21:42Z", "subject": "M1–M3.7: extraction, Kokoro TTS, player UI, language/voice selector, speech flow", "files": ["file:sidecar/chunker.py", "file:sidecar/main.py", "file:sidecar/parse.py", "file:src-tauri/src/lib.rs", "file:src/App.tsx", "file:src/PdfView.tsx", "file:src/api.ts", "file:src/main.tsx", "file:src/player.ts", "file:src/store.ts"]},
+      {"hash": "a12181d3a6c4", "date": "2026-11-23T19:02:58Z", "subject": "M0 spike: Tauri 2 + React shell with Python sidecar /health round trip", "files": ["file:sidecar/main.py", "file:src-tauri/src/lib.rs", "file:src-tauri/src/main.rs", "file:src/App.tsx", "file:src/main.tsx"]}
+    ]
+  },
+  "diagnostics": [
+    {"level": "info", "code": "unmatched-request", "path": "src/player.ts", "line": 43, "message": "Template URL `http://127.0.0.1:${port}/stop` matched by path suffix only"}
+  ]
+}

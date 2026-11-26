@@ -1,0 +1,8 @@
+{
+  "name": "codemap",
+  "private": true,
+  "scripts": {
+    "codemap": "node packages/generator/src/cli.ts",
+    "test": "npm test --prefix packages/generator"
+  }
+}

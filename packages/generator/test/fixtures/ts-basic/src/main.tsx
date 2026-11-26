@@ -1,0 +1,10 @@
+import React from "react";
+import { App } from "@/App";
+import "./styles.css";
+import type { Foo } from "./types.js";
+import { helper } from "./components";
+import fs from "node:fs";
+import { x } from "@scope/pkg/deep";
+import missing from "./nope";
+const lazy = () => import("./components/Lazy");
+export { App } from "./App";

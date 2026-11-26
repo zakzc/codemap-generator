@@ -1,0 +1,443 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codemap/1",
+  "title": "Codemap document (manifest, single file, or shard)",
+  "type": "object",
+  "required": ["format"],
+  "properties": {
+    "format": {
+      "const": "codemap/1"
+    },
+    "shard": {
+      "type": "string",
+      "description": "Present only in shard files"
+    },
+    "generator": {
+      "type": "object",
+      "required": ["name", "version", "generatedAt"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "required": ["name", "root"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        },
+        "remote": {
+          "type": "string",
+          "description": "git origin URL, optional"
+        },
+        "commit": {
+          "type": ["string", "null"]
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "entrypoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["category", "nodes"],
+        "properties": {
+          "category": {
+            "$ref": "#/$defs/toolCategory"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/feature"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    },
+    "rollups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "kind", "count"],
+        "properties": {
+          "from": {
+            "$ref": "#/$defs/id"
+          },
+          "to": {
+            "$ref": "#/$defs/id"
+          },
+          "kind": {
+            "$ref": "#/$defs/edgeKind"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "root"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "root": {
+            "$ref": "#/$defs/id"
+          },
+          "nodes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "edges": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hash": {
+            "$ref": "#/$defs/hash"
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "code", "message"],
+        "properties": {
+          "level": {
+            "enum": ["info", "warn", "error"]
+          },
+          "code": {
+            "enum": ["unresolved-import", "parse-error", "unmatched-request", "ambiguous-symbol", "skipped-file", "stale-override", "shallow-history"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "description": "Git history (Spec 2 §7.5)",
+      "required": ["commits"],
+      "properties": {
+        "scanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["hash", "date", "subject", "files"],
+            "properties": {
+              "hash": {
+                "$ref": "#/$defs/commitHash"
+              },
+              "date": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "subject": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "files": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/$defs/id"
+                }
+              },
+              "bulk": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^(project|pkg|dir|file|sym|route|endpoint|command|ext|feature):"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "commitHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "nodeKind": {
+      "enum": ["project", "package", "directory", "file", "component", "hook", "function", "class", "type", "store", "route", "endpoint", "command", "external", "asset"]
+    },
+    "edgeKind": {
+      "enum": ["imports", "renders", "calls", "uses", "reads", "writes", "requests", "routes", "extends", "tests", "spawns", "configures", "changes-with"]
+    },
+    "toolCategory": {
+      "enum": ["ui", "state", "routing", "data-fetching", "http-server", "auth", "database", "storage", "ipc", "i18n", "testing", "build", "styling", "validation", "logging", "media", "ml", "other"]
+    },
+    "location": {
+      "type": "object",
+      "required": ["path", "line"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "kind", "name", "parent"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "$ref": "#/$defs/nodeKind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "range": {
+          "type": "object",
+          "required": ["start", "end"],
+          "properties": {
+            "start": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "lang": {
+          "type": "string"
+        },
+        "exported": {
+          "type": "boolean"
+        },
+        "doc": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "note": {
+          "type": "string",
+          "description": "User note from codemap.config.json"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "loc": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fanIn": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fanOut": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "children": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "hiddenSymbols": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "commits": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "meta": {
+          "type": "object"
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to", "kind"],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/id"
+        },
+        "to": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "$ref": "#/$defs/edgeKind"
+        },
+        "confidence": {
+          "enum": ["exact", "inferred", "heuristic", "manual"]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "at": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/location"
+          }
+        },
+        "meta": {
+          "type": "object"
+        }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "required": ["id", "name", "source", "members"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^feature:"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "source": {
+          "enum": ["config", "annotation", "route", "store", "endpoint", "command", "keyword", "history"]
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/commitHash"
+          }
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["node", "role"],
+            "if": { "not": { "required": ["origin"], "properties": { "origin": { "const": "history" } } } },
+            "then": { "required": ["distance"] },
+            "properties": {
+              "node": {
+                "$ref": "#/$defs/id"
+              },
+              "role": {
+                "enum": ["entry", "core", "support", "shared"]
+              },
+              "distance": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "origin": {
+                "enum": ["auto", "user", "history"]
+              },
+              "commits": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

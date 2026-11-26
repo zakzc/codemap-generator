@@ -1,0 +1,1 @@
+{ "name": "ts-basic", "main": "src/main.tsx", "dependencies": { "react": "^18.0.0", "@scope/pkg": "1.0.0" } }

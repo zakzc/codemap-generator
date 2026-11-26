@@ -1,0 +1,25 @@
+{
+  "name": "codemap-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "codemap": "src/cli.ts"
+  },
+  "scripts": {
+    "codemap": "node src/cli.ts",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@vscode/tree-sitter-wasm": "^0.3.1",
+    "jsonc-parser": "^3.3.1",
+    "smol-toml": "^1.9.1",
+    "web-tree-sitter": "^0.27.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.11",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "typescript": "^7.0.2"
+  }
+}
