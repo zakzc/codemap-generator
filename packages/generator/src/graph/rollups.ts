@@ -4,7 +4,7 @@ export type Rollup = { from: string; to: string; kind: string; count: number };
 
 /**
  * Edges aggregated between containers (Spec 1 §4.10): package pairs and directory pairs, count = sum of edge counts.
- * Edges inside one container, between a container and its own descendant, and `changes-with` are left out.
+ * Edges inside one container, between a container and its own descendant are left out.
  */
 export function buildRollups(nodes: Node[], edges: Edge[]): Rollup[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -20,7 +20,6 @@ export function buildRollups(nodes: Node[], edges: Edge[]): Rollup[] {
   };
   const acc = new Map<string, Rollup>();
   for (const e of edges) {
-    if (e.kind === "changes-with") continue;
     const a = containers(e.from), b = containers(e.to);
     for (const x of a) for (const y of b) {
       if (x === y || x.startsWith("pkg:") !== y.startsWith("pkg:") || nested(x, y, byId)) continue;

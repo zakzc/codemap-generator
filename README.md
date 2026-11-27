@@ -113,7 +113,7 @@ The folder lives outside your repos and is self-contained: copy it (without `.ca
 | `tools` | Package → category |
 | `detail.full` | Paths where every symbol is emitted |
 | `hubFanIn`, `featureDistance` | Hub threshold (10) and feature walk depth (2) |
-| `history` | `enabled`, `maxCommits` (100), `bulkFiles` (50), `coChangeMin` (3), `refPatterns` |
+| `history` | `enabled`, `maxCommits` (100), `bulkFiles` (50), `refPatterns` |
 
 An id in the config that no longer exists produces a `stale-override` warning; the override is skipped but stays in your file.
 

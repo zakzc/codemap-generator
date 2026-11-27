@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync }
 import { LIMITS, shardDocument } from "./graph/shards.ts";
 import { join } from "node:path";
 
-const LINE_ARRAYS = new Set(["tools", "nodes", "edges", "rollups", "diagnostics"]);
+const LINE_ARRAYS = new Set(["tools", "nodes", "edges", "rollups"]);
 const line = (x: unknown) => JSON.stringify(x);
 
 /** One feature per block, one member per line. */
@@ -20,9 +20,8 @@ export function serialize(doc: Record<string, unknown>): string {
   const parts = Object.entries(doc).filter(([, v]) => v !== undefined).map(([k, v]) => {
     if (k === "features" && Array.isArray(v) && v.length) return features(v);
     if (k === "history" && v && typeof v === "object") {
-      const { commits, ...rest } = v as { commits: unknown[] };
-      const props = Object.entries(rest).map(([a, b]) => `    ${line(a)}: ${line(b)}`);
-      return `  "history": {\n${props.join(",\n")},\n    "commits": [\n${commits.map((c) => `      ${line(c)}`).join(",\n")}\n    ]\n  }`;
+      const { commits } = v as { commits: unknown[] };
+      return `  "history": {\n    "commits": [\n${commits.map((c) => `      ${line(c)}`).join(",\n")}\n    ]\n  }`;
     }
     if (LINE_ARRAYS.has(k) && Array.isArray(v) && v.length)
       return `  ${JSON.stringify(k)}: [\n${v.map((x) => `    ${JSON.stringify(x)}`).join(",\n")}\n  ]`;

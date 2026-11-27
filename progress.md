@@ -91,12 +91,20 @@ Each milestone ends with a run on Lettore and a passing `check`. Details of what
 - 2026-11-26 — Fix from the first real run (news-hub): importing an image (`../assets/newsIcon.png`) gave `unresolved-import`. Images, fonts and media (`.png .jpg .svg .woff .mp3 …`) are now asset nodes, never read or hashed, so those imports resolve. Test added (19 pass); news-hub: 69 nodes, 71 edges, 0 warnings.
 - 2026-11-26 — Default output moved from `~/Codemaps/<repo>/` to `maps/<repo>/` inside this project (created `maps/`); `--out` still overrides. README and Spec 1 updated. Older codemaps in `~/Codemaps/` are left as they are.
 - 2026-11-26 — Output file renamed to `map-<repo-name>.json` (e.g. `maps/news-hub/map-news-hub.json`); invalid output is `map-<repo-name>.invalid.json`. The config stays `codemap.config.json`. README and Spec 1 updated.
+- 2026-11-27 — Removed fields no visualiser screen reads (Spec 2 v1.2 §14, Spec 1 v0.4 §12 #11). 20 tests pass, `tsc` clean.
+  - Generator no longer writes: `changes-with` edges (and `history.coChangeMin`), `generator`, `project.root`/`languages`, `diagnostics`, node `hash`/`lang`, `metrics.children`/`commits`, `meta` `hooks`/`props`/`params`/`async`/`entryDepth`/`ecosystem`/`lastChanged`, edge `meta.names`/`typeOnly`, feature `source`/`seeds`/`commits`, `edge.at` beyond the first entry, `history.scanned`/`truncated`. Tags were already only `entry` and `hub`.
+  - Removed at the source, not stripped at the end: adapters no longer extract params/props/async/typeOnly, the co-change and entry-depth code is gone, `scan()` no longer returns diagnostics in the document (callers pass `opts.diagnostics`, as the CLI does for its warnings; `--quiet` and the warning count are unchanged).
+  - `ecosystem` is read from the external's id (`ext:npm:react`) by the tools registry. Feature listing in `init` now skips features whose members all come from history (was `source !== "history"`).
+  - Schema, config schema, `check-codemap.mjs` (invariant 7 and the `seeds` check removed) and the Lettore example updated; `maps/diagramma` and `maps/news-hub` regenerated (diagramma 883 → 827 edges, all `changes-with`).
+  - Fix found on the way: `serialize` wrote invalid JSON for a `history` block holding only `commits`; test now parses the written history back.
+  - Fix found on the way: the fixture tests were failing since the project became a git repo (a scan of `test/fixtures/*` took the project repo as root). They now scan temp copies.
+  - Not done: the viewer (Spec 3) is not in this repo, so its loader still drops `changes-with`/`commits` itself; harmless, it can delete that code.
 
 ## In progress
 - Spec 1 generator milestones are finished (M4 skipped). Next candidates: request matching (the part of M4 that links TS calls to endpoints), the viewer (Spec 3).
 - Spec 3 open questions 1–8.
 
 ## To do
-- Spec 3 v1.0 after its open questions are answered; add a history view (search commit subjects → highlight files, `changes-with` lines, commit-based features).
+- Spec 3 v1.0 after its open questions are answered; add a history view (search commit subjects → highlight files, commit-based features).
 - Optional M4: request matching first (TS `fetch`/`call` → endpoints); Rust/Tauri/axum only if needed.
 - When the generator exists, regenerate the hand-written example: Lettore's root `package.json` makes the root package `pkg:.` (the example uses `pkg:src`).

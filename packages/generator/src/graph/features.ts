@@ -78,7 +78,7 @@ export function buildFeatures(nodes: Node[], edges: Edge[], config: Config, anno
       const role = isHub(id) && dd > 0 ? "shared" : dd === 0 ? (n.kind === "component" || n.kind === "route" ? "entry" : "core") : dd === 1 ? "core" : "support";
       return { node: id, role, distance: dd };
     });
-    features.push({ id: d.id, name: d.name, ...(d.description && { description: d.description }), source: d.source, seeds, members: sortMembers(members) });
+    features.push({ id: d.id, name: d.name, ...(d.description && { description: d.description }), members: sortMembers(members) });
   }
   return features;
 }
@@ -90,9 +90,8 @@ export const sortMembers = (m: Member[]): Member[] =>
 export function mergeHistory(features: Feature[], groups: Grouping[], hubs: Set<string>): Feature[] {
   const out = new Map(features.map((f) => [f.id, f]));
   for (const g of groups) {
-    const f = out.get(g.id) ?? { id: g.id, name: g.name, ...(g.description && { description: g.description }), source: "history", members: [] };
+    const f = out.get(g.id) ?? { id: g.id, name: g.name, ...(g.description && { description: g.description }), members: [] };
     out.set(g.id, f);
-    f.commits = g.commits;
     for (const [file, n] of g.files) {
       const m = f.members.find((x) => x.node === file);
       if (m) m.commits = n;

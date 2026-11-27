@@ -12,30 +12,11 @@
       "type": "string",
       "description": "Present only in shard files"
     },
-    "generator": {
-      "type": "object",
-      "required": ["name", "version", "generatedAt"],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "version": {
-          "type": "string"
-        },
-        "generatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      }
-    },
     "project": {
       "type": "object",
-      "required": ["name", "root"],
+      "required": ["name"],
       "properties": {
         "name": {
-          "type": "string"
-        },
-        "root": {
           "type": "string"
         },
         "remote": {
@@ -44,12 +25,6 @@
         },
         "commit": {
           "type": ["string", "null"]
-        },
-        "languages": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         },
         "entrypoints": {
           "type": "array",
@@ -146,43 +121,11 @@
         }
       }
     },
-    "diagnostics": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["level", "code", "message"],
-        "properties": {
-          "level": {
-            "enum": ["info", "warn", "error"]
-          },
-          "code": {
-            "enum": ["unresolved-import", "parse-error", "unmatched-request", "ambiguous-symbol", "skipped-file", "stale-override", "shallow-history"]
-          },
-          "path": {
-            "type": "string"
-          },
-          "line": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "message": {
-            "type": "string"
-          }
-        }
-      }
-    },
     "history": {
       "type": "object",
       "description": "Git history (Spec 2 §7.5)",
       "required": ["commits"],
       "properties": {
-        "scanned": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "truncated": {
-          "type": "boolean"
-        },
         "commits": {
           "type": "array",
           "items": {
@@ -233,7 +176,7 @@
       "enum": ["project", "package", "directory", "file", "component", "hook", "function", "class", "type", "store", "route", "endpoint", "command", "external", "asset"]
     },
     "edgeKind": {
-      "enum": ["imports", "renders", "calls", "uses", "reads", "writes", "requests", "routes", "extends", "tests", "spawns", "configures", "changes-with"]
+      "enum": ["imports", "renders", "calls", "uses", "reads", "writes", "requests", "routes", "extends", "tests", "spawns", "configures"]
     },
     "toolCategory": {
       "enum": ["ui", "state", "routing", "data-fetching", "http-server", "auth", "database", "storage", "ipc", "i18n", "testing", "build", "styling", "validation", "logging", "media", "ml", "other"]
@@ -291,9 +234,6 @@
             }
           }
         },
-        "lang": {
-          "type": "string"
-        },
         "exported": {
           "type": "boolean"
         },
@@ -326,22 +266,11 @@
               "type": "integer",
               "minimum": 0
             },
-            "children": {
-              "type": "integer",
-              "minimum": 0
-            },
             "hiddenSymbols": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "commits": {
               "type": "integer",
               "minimum": 0
             }
           }
-        },
-        "hash": {
-          "$ref": "#/$defs/hash"
         },
         "meta": {
           "type": "object"
@@ -370,7 +299,7 @@
         },
         "at": {
           "type": "array",
-          "maxItems": 3,
+          "maxItems": 1,
           "items": {
             "$ref": "#/$defs/location"
           }
@@ -382,7 +311,7 @@
     },
     "feature": {
       "type": "object",
-      "required": ["id", "name", "source", "members"],
+      "required": ["id", "name", "members"],
       "properties": {
         "id": {
           "type": "string",
@@ -393,21 +322,6 @@
         },
         "description": {
           "type": "string"
-        },
-        "source": {
-          "enum": ["config", "annotation", "route", "store", "endpoint", "command", "keyword", "history"]
-        },
-        "seeds": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/id"
-          }
-        },
-        "commits": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/commitHash"
-          }
         },
         "members": {
           "type": "array",

@@ -7,20 +7,23 @@ import { test } from "node:test";
 import { sanitizeRemote } from "../src/discover/git.ts";
 import { makeResolver } from "../src/resolve/typescript.ts";
 import { scan } from "../src/scan.ts";
+import type { Diagnostic } from "../src/types.ts";
 import { validateCodemap } from "../src/validate.ts";
 import { serialize } from "../src/write.ts";
 
-const fixture = new URL("./fixtures/ts-basic", import.meta.url).pathname;
 const tmp = () => mkdtempSync(join(tmpdir(), "codemap-"));
+// fixtures are scanned from a copy: inside this repo, git would make the repo root the scan root
+const fixtureCopy = (name: string) => { const dir = tmp(); cpSync(new URL(`./fixtures/${name}`, import.meta.url).pathname, dir, { recursive: true }); return dir; };
+const fixture = fixtureCopy("ts-basic");
 const edge = (doc: any, from: string, to: string) => doc.edges.find((e: any) => e.from === from && e.to === to);
 
 test("ts-basic: nodes, edges, diagnostics, validation", async () => {
-  const doc: any = await scan(fixture);
+  const diagnostics: Diagnostic[] = [];
+  const doc: any = await scan(fixture, {}, { diagnostics });
   assert.deepEqual(validateCodemap(doc), []);
   const main = "file:src/main.tsx";
   assert.equal(edge(doc, main, "file:src/App.tsx").count, 2); // `@/App` alias + re-export
-  assert.equal(edge(doc, main, "file:src/types.ts").meta.typeOnly, true); // ./types.js → types.ts
-  assert.equal(edge(doc, main, "file:src/components/index.ts").meta.names[0], "helper");
+  assert.ok(edge(doc, main, "file:src/types.ts")); // ./types.js → types.ts
   assert.equal(edge(doc, main, "file:src/components/Lazy.ts").meta.dynamic, true);
   assert.ok(edge(doc, main, "file:src/styles.css"));
   assert.ok(edge(doc, main, "ext:npm:@scope/pkg")); // scope kept, subpath dropped
@@ -28,7 +31,7 @@ test("ts-basic: nodes, edges, diagnostics, validation", async () => {
   assert.ok(!doc.edges.some((e: any) => e.to.includes("fs")), "node: built-ins dropped");
   assert.ok(!doc.nodes.some((n: any) => n.path?.includes("node_modules")));
   assert.deepEqual(doc.project.entrypoints, [main]);
-  assert.deepEqual(doc.diagnostics.filter((d: any) => d.level !== "info").map((d: any) => d.code), ["unresolved-import"]);
+  assert.deepEqual(diagnostics.filter((d) => d.level !== "info").map((d) => d.code), ["unresolved-import"]);
 });
 
 test("static assets: importing an image resolves to an asset node", async () => {
@@ -36,20 +39,19 @@ test("static assets: importing an image resolves to an asset node", async () => 
   mkdirSync(join(dir, "src"));
   writeFileSync(join(dir, "src/a.ts"), 'import logo from "./logo.png";\nexport const l = logo;\n');
   writeFileSync(join(dir, "src/logo.png"), Buffer.from([0x89, 0x50, 0, 0xff]));
-  const doc: any = await scan(dir);
-  assert.deepEqual(doc.diagnostics.filter((d: any) => d.level !== "info"), []);
+  const diagnostics: Diagnostic[] = [];
+  const doc: any = await scan(dir, {}, { diagnostics });
+  assert.deepEqual(diagnostics.filter((d) => d.level !== "info"), []);
   assert.ok(doc.edges.some((e: any) => e.to === "file:src/logo.png"));
-  assert.equal(doc.nodes.find((n: any) => n.id === "file:src/logo.png").hash, undefined);
   assert.deepEqual(validateCodemap(doc), []);
 });
 
 test("determinism: same input, same bytes", async () => {
   const a: any = await scan(fixture), b: any = await scan(fixture);
-  a.generator.generatedAt = b.generator.generatedAt = "x";
   assert.equal(serialize(a), serialize(b));
 });
 
-test("git repo: remote credentials stripped, clean tree uses commit time, untracked files not shown", async () => {
+test("git repo: remote credentials stripped, untracked files not shown", async () => {
   const dir = tmp();
   cpSync(fixture, dir, { recursive: true });
   const git = (...a: string[]) => execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { stdio: "ignore" });
@@ -58,8 +60,6 @@ test("git repo: remote credentials stripped, clean tree uses commit time, untrac
   let doc: any = await scan(dir);
   assert.equal(doc.project.remote, "https://github.com/me/x.git");
   assert.match(doc.project.commit, /^[0-9a-f]+$/);
-  const again: any = await scan(dir);
-  assert.equal(doc.generator.generatedAt, again.generator.generatedAt);
   writeFileSync(join(dir, "src/new.ts"), "export {}");
   doc = await scan(dir);
   assert.ok(!doc.nodes.some((n: any) => n.id === "file:src/new.ts"));
@@ -100,8 +100,8 @@ test("resolver: probing, index files, extends chain, queries", () => {
   assert.deepEqual(r("@a/b/c", "a/z.ts"), { kind: "external", name: "@a/b" });
 });
 
-test("ts-react-redux: symbols, detail rule, React and Redux edges, entry depth", async () => {
-  const doc: any = await scan(new URL("./fixtures/ts-react-redux", import.meta.url).pathname);
+test("ts-react-redux: symbols, detail rule, React and Redux edges, conditional rendering", async () => {
+  const doc: any = await scan(fixtureCopy("ts-react-redux"));
   assert.deepEqual(validateCodemap(doc), []);
   const node = (id: string) => doc.nodes.find((n: any) => n.id === id);
   const kinds = (ids: Record<string, string>) => Object.entries(ids).map(([id, k]) => assert.equal(node(id)?.kind, k, id));
@@ -116,7 +116,6 @@ test("ts-react-redux: symbols, detail rule, React and Redux edges, entry depth",
   assert.equal(node("file:src/App.tsx").metrics.hiddenSymbols, 1);
   assert.equal(node("sym:src/store.ts#documentSlice").doc, "Holds the loaded document.");
   assert.deepEqual(node("sym:src/store.ts#documentSlice").meta, { framework: "redux", actions: ["clear", "setDoc"], stateKeys: ["documents"] });
-  assert.deepEqual(node("sym:src/hooks.ts#useDoc").meta.hooks, ["useAppSelector", "useState"]);
 
   const app = "sym:src/App.tsx#App";
   const e = (from: string, kind: string, to: string) => doc.edges.find((x: any) => x.from === from && x.kind === kind && x.to === to);
@@ -133,20 +132,17 @@ test("ts-react-redux: symbols, detail rule, React and Redux edges, entry depth",
 
   assert.ok(e("sym:src/Footer.tsx#Footer", "writes", "sym:src/store.ts#documentSlice")); // dispatch(doc.clear()) with `doc = slice.actions`
 
-  const depth = (id: string) => node(id).meta.entryDepth;
-  assert.equal(depth(app), 0);
-  assert.equal(depth("sym:src/components/PdfView.tsx#PdfView"), 1);
-  assert.equal(depth("sym:src/Orphan.tsx#Orphan"), -1);
   assert.equal(node("sym:src/Settings.tsx#Settings").meta.conditional, true);
 });
 
 test("detail.full keeps private symbols", async () => {
-  const doc: any = await scan(new URL("./fixtures/ts-react-redux", import.meta.url).pathname, { detail: { full: ["**"] } });
+  const doc: any = await scan(fixtureCopy("ts-react-redux"), { detail: { full: ["**"] } });
   assert.ok(doc.nodes.some((n: any) => n.id === "sym:src/App.tsx#unusedHelper"));
 });
 
 test("python-fastapi: adapter, resolver, FastAPI/Flask endpoints", async () => {
-  const doc: any = await scan(new URL("./fixtures/python-fastapi", import.meta.url).pathname);
+  const diagnostics: Diagnostic[] = [];
+  const doc: any = await scan(fixtureCopy("python-fastapi"), {}, { diagnostics });
   assert.deepEqual(validateCodemap(doc), []);
   const node = (id: string) => doc.nodes.find((n: any) => n.id === id);
   const edge = (from: string, kind: string, to: string) => doc.edges.find((x: any) => x.from === from && x.kind === kind && x.to === to);
@@ -177,8 +173,8 @@ test("python-fastapi: adapter, resolver, FastAPI/Flask endpoints", async () => {
   assert.ok(edge("file:sidecar/main.py", "imports", "file:sidecar/pkg/__init__.py"));
   assert.ok(edge("file:sidecar/pkg/other.py", "imports", "file:sidecar/chunker.py"), "from .. import chunker");
   assert.ok(edge("file:sidecar/pkg/other.py", "imports", "file:sidecar/pkg/inner.py"), "from . import inner");
-  assert.deepEqual(doc.diagnostics.filter((d: any) => d.level !== "info").map((d: any) => `${d.code} ${d.path}:${d.line}`), ["unresolved-import sidecar/pkg/other.py:3"]);
-  assert.equal(node("ext:pip:fastapi").meta.ecosystem, "pip");
+  assert.deepEqual(diagnostics.filter((d) => d.level !== "info").map((d) => `${d.code} ${d.path}:${d.line}`), ["unresolved-import sidecar/pkg/other.py:3"]);
+  assert.equal(node("ext:pip:fastapi").meta.category, "http-server");
 
   // calls: through an import, through a package re-export, from a hidden helper lifted to its file
   assert.equal(edge("endpoint:POST /parse", "calls", "sym:sidecar/parse.py#parse_pdf").confidence, "inferred");
@@ -187,28 +183,27 @@ test("python-fastapi: adapter, resolver, FastAPI/Flask endpoints", async () => {
 });
 
 test("features: auto features, annotations, walk roles", async () => {
-  const doc: any = await scan(new URL("./fixtures/ts-react-redux", import.meta.url).pathname);
+  const doc: any = await scan(fixtureCopy("ts-react-redux"));
   const feature = (id: string) => doc.features.find((f: any) => f.id === id);
   const slice = feature("feature:store-documentslice");
-  assert.equal(slice.source, "store");
   const member = (f: any, id: string) => f.members.find((m: any) => m.node === id);
   assert.deepEqual([member(slice, "sym:src/store.ts#documentSlice").role, member(slice, "sym:src/store.ts#documentSlice").distance], ["core", 0]);
   assert.equal(member(slice, "sym:src/App.tsx#App").distance, 1); // App writes the slice
   const note = feature("feature:footer-actions"); // `// @feature footer-actions` above Footer
-  assert.equal(note.source, "annotation");
-  assert.deepEqual(note.seeds, ["sym:src/Footer.tsx#Footer"]);
+  assert.equal(member(note, "sym:src/Footer.tsx#Footer").distance, 0);
   assert.deepEqual(doc.tools.find((t: any) => t.category === "state").nodes, ["ext:npm:@reduxjs/toolkit", "ext:npm:react-redux"]);
   assert.equal(doc.nodes.find((n: any) => n.id === "ext:npm:react").meta.category, "ui");
 });
 
 test("overrides: notes, manual edges, include/exclude/roles, tools, stale ids", async () => {
-  const repo = new URL("./fixtures/ts-react-redux", import.meta.url).pathname;
+  const repo = fixtureCopy("ts-react-redux");
+  const diagnostics: Diagnostic[] = [];
   const doc: any = await scan(repo, {
     notes: { "file:src/api.ts": "All HTTP goes through get().", "file:gone.ts": "stale" },
     edges: [{ from: "sym:src/App.tsx#App", to: "sym:src/api.ts#get", kind: "requests", note: "dynamic URL" }, { from: "file:nope", to: "file:src/api.ts", kind: "calls" }],
     features: [{ id: "feature:store-documentslice", name: "Doc", seeds: ["sym:src/store.ts#documentSlice"], include: ["file:src/api.ts", "file:missing"], exclude: ["sym:src/App.tsx#App"], roles: { "sym:src/store.ts#documentSlice": "support" } }],
     tools: { react: "other" },
-  } as any);
+  } as any, { diagnostics });
   assert.equal(doc.nodes.find((n: any) => n.id === "file:src/api.ts").note, "All HTTP goes through get().");
   assert.deepEqual(doc.edges.find((e: any) => e.kind === "requests"), { from: "sym:src/App.tsx#App", to: "sym:src/api.ts#get", kind: "requests", confidence: "manual", meta: { note: "dynamic URL" } });
   const f = doc.features.find((x: any) => x.id === "feature:store-documentslice");
@@ -216,12 +211,12 @@ test("overrides: notes, manual edges, include/exclude/roles, tools, stale ids", 
   assert.equal(f.members.find((m: any) => m.node === "file:src/api.ts").origin, "user");
   assert.deepEqual(f.members.find((m: any) => m.node === "sym:src/store.ts#documentSlice"), { node: "sym:src/store.ts#documentSlice", role: "support", distance: 0, origin: "user" });
   assert.equal(doc.nodes.find((n: any) => n.id === "ext:npm:react").meta.category, "other");
-  assert.deepEqual(doc.diagnostics.filter((d: any) => d.code === "stale-override").map((d: any) => d.message).sort(),
+  assert.deepEqual(diagnostics.filter((d) => d.code === "stale-override").map((d) => d.message).sort(),
     ["edge: file:nope does not exist", "feature feature:store-documentslice include: file:missing does not exist", "note: file:gone.ts does not exist"]);
   assert.deepEqual(validateCodemap(doc), []);
 });
 
-test("history: renames, bulk, co-change, grouping, no author data", async () => {
+test("history: renames, bulk, grouping, no author data", async () => {
   const dir = tmp();
   let t = Date.parse("2026-01-01T00:00:00Z"); // distinct commit dates, so the newest-first order is unambiguous
   const git = (...a: string[]) => {
@@ -246,23 +241,27 @@ test("history: renames, bulk, co-change, grouping, no author data", async () => 
   assert.ok(doc.history.commits.slice(1).every((c: any) => !c.files.some((f: string) => f.endsWith("README.md"))));
   assert.ok(doc.history.commits.at(-1).files.includes("file:src/bb.ts"), "old commits count for the file under its current name");
 
-  const a = doc.nodes.find((n: any) => n.id === "file:src/a.ts");
-  assert.equal(a.metrics.commits, 4); // includes the bulk commit
-  assert.equal(a.meta.lastChanged, doc.history.commits[0].date);
-  const cw = doc.edges.filter((e: any) => e.kind === "changes-with");
-  assert.deepEqual(cw, [{ from: "file:src/a.ts", to: "file:src/bb.ts", kind: "changes-with", confidence: "heuristic", count: 3 }]); // bulk commit not counted, c.ts / d.ts never reach the threshold
-
   const f = (id: string) => doc.features.find((x: any) => x.id === id);
-  assert.equal(f("feature:scope-player").commits.length, 2);
   assert.deepEqual(f("feature:scope-player").members.map((m: any) => [m.node, m.role, m.origin, m.commits]), [["file:src/a.ts", "core", "history", 2], ["file:src/bb.ts", "core", "history", 2]]);
-  assert.equal(f("feature:ref-12").source, "history");
   assert.equal(f("feature:ref-12").description, "fix #12: tweak");
-  assert.equal(f("feature:pdf").source, "config");
-  assert.equal(f("feature:pdf").commits.length, 1);
-  assert.ok(!f("feature:scope-player").commits.includes(doc.history.commits[0].hash));
+  assert.deepEqual(f("feature:pdf").members.map((m: any) => [m.node, m.commits]), [["file:src/bb.ts", 1]]);
 
   const text = serialize(doc);
+  assert.deepEqual(JSON.parse(text).history, doc.history, "written history parses back");
   assert.ok(!/Secret|secret@example/.test(text), "no author data");
-  assert.equal(serialize(await scan(dir, cfg)).replace(/"generatedAt".*/, ""), text.replace(/"generatedAt".*/, ""), "same HEAD → same bytes");
+  assert.equal(serialize(await scan(dir, cfg)), text, "same HEAD → same bytes");
   assert.equal(((await scan(dir, cfg, { history: false })) as any).history, undefined);
+});
+
+test("fields no visualiser reads are not emitted", async () => {
+  const dir = fixtureCopy("ts-react-redux");
+  const doc: any = await scan(dir);
+  for (const k of ["generator", "diagnostics"]) assert.equal(doc[k], undefined, k);
+  assert.ok(doc.project.root === undefined && doc.project.languages === undefined);
+  assert.ok(!doc.edges.some((e: any) => e.kind === "changes-with"));
+  assert.ok(doc.nodes.every((n: any) => n.hash === undefined && n.lang === undefined && n.metrics?.children === undefined && n.metrics?.commits === undefined));
+  const dropped = ["hooks", "props", "params", "async", "entryDepth", "ecosystem", "lastChanged"];
+  assert.ok(doc.nodes.every((n: any) => dropped.every((k) => n.meta?.[k] === undefined)));
+  assert.ok(doc.edges.every((e: any) => e.meta?.names === undefined && e.meta?.typeOnly === undefined && (e.at?.length ?? 0) <= 1));
+  assert.ok(doc.features.every((f: any) => f.source === undefined && f.seeds === undefined && f.commits === undefined));
 });

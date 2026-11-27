@@ -17,17 +17,15 @@ export function sanitizeRemote(url: string): string {
   } catch { return ""; }
 }
 
-export type GitInfo = { root: string; commit: string | null; commitDate: string | null; dirty: boolean; remote?: string };
+export type GitInfo = { root: string; commit: string | null; remote?: string };
 
 export function gitInfo(dir: string): GitInfo | null {
   const root = run(dir, ["rev-parse", "--show-toplevel"])?.trim();
   if (!root) return null;
   const commit = run(root, ["rev-parse", "--short", "HEAD"])?.trim() || null;
-  const commitDate = commit ? run(root, ["log", "-1", "--format=%cI", "HEAD"])?.trim() || null : null;
-  const dirty = (run(root, ["status", "--porcelain"]) ?? "").trim() !== "";
   const raw = run(root, ["remote", "get-url", "origin"])?.trim();
   const remote = raw ? sanitizeRemote(raw) || undefined : undefined;
-  return { root, commit, commitDate, dirty, remote };
+  return { root, commit, remote };
 }
 
 export const gitFiles = (root: string): string[] | null =>

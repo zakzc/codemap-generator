@@ -40,17 +40,6 @@ function argFact(n: TsNode, depth = 0): ArgFact {
 
 const argsOf = (call: TsNode): ArgFact[] => (call.childForFieldName("arguments")?.namedChildren ?? []).slice(0, 2).filter((a) => a && a.type !== "comment").map((a) => argFact(a!));
 
-function paramInfo(fn: TsNode): { params: string[]; props?: string[] } {
-  const list = fn.childForFieldName("parameters") ?? fn.childForFieldName("parameter");
-  const nodes = list?.type === "formal_parameters" ? list.namedChildren : list ? [list] : [];
-  const pats = nodes.filter((c): c is TsNode => !!c && c.type !== "comment").map((c) => c.childForFieldName("pattern") ?? c);
-  const first = pats[0];
-  const props = first?.type === "object_pattern"
-    ? first.namedChildren.flatMap((c) => (c?.type === "shorthand_property_identifier_pattern" ? [c.text] : c?.type === "pair_pattern" ? [c.childForFieldName("key")?.text ?? ""] : [])).filter(Boolean)
-    : undefined;
-  return { params: pats.map((p) => (p.type === "identifier" ? p.text : p.type === "object_pattern" ? "{…}" : p.text.slice(0, 40))), ...(props && { props }) };
-}
-
 function docOf(outer: TsNode): string | undefined {
   const c = outer.previousNamedSibling;
   if (c?.type !== "comment" || !c.text.startsWith("/**") || c.endPosition.row < outer.startPosition.row - 1) return;
@@ -88,7 +77,7 @@ export function typescriptFacts(root: TsNode): Pick<FileFacts, "imports" | "decl
     switch (stmt.type) {
       case "function_declaration": case "generator_function_declaration": {
         const name = nameOf(stmt);
-        addDecl({ name, kind: "function", range: range(outer), exported, async: stmt.children.some((c) => c?.type === "async") || undefined, ...paramInfo(stmt) }, outer);
+        addDecl({ name, kind: "function", range: range(outer), exported }, outer);
         if (isDefault) defaultExport = name;
         break;
       }
@@ -123,7 +112,7 @@ export function typescriptFacts(root: TsNode): Pick<FileFacts, "imports" | "decl
           if (value?.type === "member_expression" && /^[\w$]+\.actions$/.test(value.text))
             addDecl({ name: nm.text, kind: "alias", range: r, exported, target: value.text }, outer); // `export const doc = slice.actions`
           else if (value && FN_TYPES.has(value.type))
-            addDecl({ name: nm.text, kind: "function", range: r, exported, async: value.children.some((c) => c?.type === "async") || undefined, ...paramInfo(value) }, outer);
+            addDecl({ name: nm.text, kind: "function", range: r, exported }, outer);
           else if (value?.type === "call_expression") {
             const callee = value.childForFieldName("function")?.text ?? "";
             const lazy = /^(React\.)?lazy$/.test(callee) ? value.text.match(/import\(\s*['"]([^'"]+)['"]/)?.[1] : undefined;
@@ -156,8 +145,7 @@ export function typescriptFacts(root: TsNode): Pick<FileFacts, "imports" | "decl
           if (x?.type === "identifier") bindings.push({ local: x.text, imported: "default" });
           if (x?.type === "namespace_import") bindings.push({ local: x.namedChild(0)?.text ?? "", imported: "*" });
         }
-      const typeOnly = top.children.some((c) => c?.type === "type") || undefined;
-      imports.push({ spec, names: bindings.map((b) => b.imported), line: top.startPosition.row + 1, bindings, ...(typeOnly && { typeOnly }) });
+      imports.push({ spec, names: bindings.map((b) => b.imported), line: top.startPosition.row + 1, bindings });
     } else declare(top, false, top, false);
   }
   for (const d of decls) if (exportedLater.has(d.name)) d.exported = true;

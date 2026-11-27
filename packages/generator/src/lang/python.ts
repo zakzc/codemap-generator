@@ -42,13 +42,6 @@ function docOf(def: TsNode): string | undefined {
   return para ? para.slice(0, 300) : undefined;
 }
 
-const paramNames = (def: TsNode) =>
-  (def.childForFieldName("parameters")?.namedChildren ?? []).flatMap((p) => {
-    if (!p || p.type === "comment") return [];
-    const n = p.type === "identifier" ? p : p.childForFieldName("name") ?? p.namedChild(0);
-    return n ? [n.text] : [];
-  });
-
 /** Imports, top-level decls (functions, classes, call-initialised names), decorators, calls (Spec 1 §4.3, §5). */
 export function pythonFacts(root: TsNode): Facts {
   const imports: FileFacts["imports"] = [];
@@ -100,7 +93,7 @@ export function pythonFacts(root: TsNode): Facts {
       const doc = docOf(def);
       const base = { name, range: range(top), exported: !name.startsWith("_"), ...(doc && { doc }), ...(decorators.length && { decorators }), ...(depends.length && { depends }) };
       if (def.type === "function_definition")
-        add({ ...base, kind: "function", params: paramNames(def), ...(def.children.some((c) => c?.type === "async") && { async: true }) }, top);
+        add({ ...base, kind: "function" }, top);
       else {
         const methods = def.childForFieldName("body")?.namedChildren.flatMap((c) => {
           const f = c?.type === "decorated_definition" ? c.childForFieldName("definition") : c;

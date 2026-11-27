@@ -12,7 +12,7 @@ import { serialize, writeCodemap } from "../src/write.ts";
 const tmp = () => mkdtempSync(join(tmpdir(), "codemap-"));
 const fixture = new URL("./fixtures/ts-react-redux", import.meta.url).pathname;
 const put = (root: string, files: Record<string, string>) => { for (const [f, c] of Object.entries(files)) { mkdirSync(dirname(join(root, f)), { recursive: true }); writeFileSync(join(root, f), c); } };
-const norm = (doc: any) => serialize({ ...doc, generator: { ...doc.generator, generatedAt: "x" } });
+const norm = (doc: any) => serialize(doc);
 
 test("incremental: only changed files are re-parsed, output equals a cold run", async () => {
   const repo = tmp(), cacheDir = tmp();

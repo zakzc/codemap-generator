@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checks the cross-reference invariants of Spec 2 §10 (1–7) that JSON Schema cannot express.
+// Checks the cross-reference invariants of Spec 2 §10 (1–6) that JSON Schema cannot express.
 // shortcut: shape checks cover required fields + enums only, not full JSON Schema; use ajv in Spec 1 tests.
 // Usage: node check-codemap.mjs <codemap.json>   (exit 1 on errors)
 import { readFileSync } from "node:fs";
@@ -43,7 +43,6 @@ export function check(doc) {
   for (const id of doc?.project?.entrypoints ?? []) ref(id, "project.entrypoints");
   for (const t of doc?.tools ?? []) for (const id of t?.nodes ?? []) ref(id, `tools.${t?.category}`);
   for (const f of doc?.features ?? []) {
-    for (const id of f?.seeds ?? []) ref(id, `${f.id}.seeds`);
     for (const m of f?.members ?? []) ref(m?.node, `${f.id}.members`);
   }
   for (const r of doc?.rollups ?? []) { ref(r?.from, "rollup.from"); ref(r?.to, "rollup.to"); }
@@ -71,11 +70,6 @@ export function check(doc) {
   const commitKey = (c) => [c?.date ?? "", c?.hash ?? ""];
   if (!commits.every((c, i) => { if (i === 0) return true; const [d0, h0] = commitKey(commits[i - 1]), [d1, h1] = commitKey(c); return d0 > d1 || (d0 === d1 && h0 <= h1); }))
     err("history.commits not sorted newest first");
-
-  // 7. changes-with stored once (from < to); feature commits exist
-  for (const e of edges) if (e?.kind === "changes-with" && !(e.from < e.to)) err(`changes-with ${e.from} -> ${e.to}: from must sort before to`);
-  const hashes = new Set(commits.map((c) => c?.hash));
-  for (const f of doc?.features ?? []) for (const h of f?.commits ?? []) if (!hashes.has(h)) err(`${f.id}.commits: unknown commit ${h}`);
 
   return errors;
 }

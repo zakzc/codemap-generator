@@ -1,5 +1,5 @@
 import { matchesGlob } from "node:path";
-import { classifyReact, entryDepths, isHookName, type Classified } from "../detect/react.ts";
+import { classifyReact, isHookName, type Classified } from "../detect/react.ts";
 import { findEndpoints, type Endpoint } from "../detect/fastapi.ts";
 import { classifyRedux, isSelectorHook } from "../detect/redux.ts";
 import type { Resolved } from "../resolve/typescript.ts";
@@ -12,21 +12,21 @@ type Acc = Edge & { count: number; cond: boolean };
 const STRUCTURAL = new Set(["component", "hook", "store", "class", "endpoint"]);
 const endpointId = (e: Endpoint) => `endpoint:${e.method} ${e.path}`;
 const classifyPython = (d: Decl): Classified | undefined =>
-  d.kind === "function" ? { kind: "function", meta: { ...(d.async && { async: true }), ...(d.params?.length && { params: d.params }) } }
+  d.kind === "function" ? { kind: "function", meta: {} }
   : d.kind === "class" ? { kind: "class", meta: { declaredAs: "class", ...(d.methods && { methods: d.methods }) } } : undefined;
 const isTest = (p: string) => /\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)__tests__\/|(^|\/)(test_[^/]*|[^/]*_test)\.py$|(^|\/)tests\//.test(p);
 const clean = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== false && !(Array.isArray(v) && !v.length)));
 
 type Input = {
   facts: FileFacts[]; resolve: (spec: string, from: string) => Resolved;
-  entryFiles: Set<string>; fullGlobs: string[];
+  fullGlobs: string[];
 };
 
 /**
  * Symbol nodes and the edges between them (Spec 1 §4.4–4.6): names resolve to a same-file top-level decl, else to the
  * symbol they were imported as (one level of re-export). Symbols dropped by the detail rule lift their edges to the file.
  */
-export function buildSymbols({ facts, resolve, entryFiles, fullGlobs }: Input) {
+export function buildSymbols({ facts, resolve, fullGlobs }: Input) {
   const byPath = new Map(facts.map((f) => [f.path, f]));
   const declsOf = new Map(facts.map((f) => [f.path, new Map(f.decls.map((d) => [d.name, d]))]));
   const targetFile = (spec: string, from: string) => { const r = resolve(spec, from); return r.kind === "file" && byPath.has(r.path) ? r.path : undefined; };
@@ -149,15 +149,11 @@ export function buildSymbols({ facts, resolve, entryFiles, fullGlobs }: Input) {
     }
   }
 
-  // --- entry depth + conditional rendering
+  // --- conditional rendering
   const renders = [...acc.values()].filter((e) => e.kind === "renders");
-  const components = [...syms.values()].filter((s) => s.cls.kind === "component");
-  const ids = components.map((s) => s.id);
-  const roots = renders.filter((e) => [...entryFiles].some((p) => e.from === `file:${p}`)).map((e) => e.to);
-  const depth = entryDepths(ids, roots, renders.map((e) => [e.from, e.to]));
-  for (const s of components) {
+  for (const s of syms.values()) {
+    if (s.cls.kind !== "component") continue;
     const incoming = renders.filter((e) => e.to === s.id);
-    s.cls.meta.entryDepth = depth.get(s.id) ?? -1;
     if (incoming.length && incoming.every((e) => e.cond)) s.cls.meta.conditional = true;
   }
 
@@ -167,22 +163,21 @@ export function buildSymbols({ facts, resolve, entryFiles, fullGlobs }: Input) {
   for (const s of syms.values()) {
     if (!s.emitted) { hidden.set(s.file, (hidden.get(s.file) ?? 0) + 1); continue; }
     const meta = clean(s.cls.meta);
-    const lang = byPath.get(s.file)!.lang;
     const isEndpoint = s.cls.kind === "endpoint";
     if (isEndpoint && nodes.some((n) => n.id === s.id)) continue; // same route declared twice: first wins
     nodes.push({
       id: s.id, kind: s.cls.kind, name: isEndpoint ? s.id.slice(9) : s.decl.name, parent: `file:${s.file}`, path: s.file,
-      range: s.decl.range, lang, ...(s.decl.exported && !isEndpoint && { exported: true }),
+      range: s.decl.range, ...(s.decl.exported && !isEndpoint && { exported: true }),
       ...(s.decl.doc && { doc: s.decl.doc }), ...(Object.keys(meta).length && { meta }),
     });
     if (isEndpoint) // further routes on the same function become their own endpoint nodes
       for (const e of endpoints.get(`${s.file}#${s.decl.name}`)!.slice(1))
         if (!nodes.some((n) => n.id === endpointId(e)))
-          nodes.push({ id: endpointId(e), kind: "endpoint", name: endpointId(e).slice(9), parent: `file:${s.file}`, path: s.file, range: s.decl.range, lang, meta: clean({ method: e.method, path: e.path, framework: e.framework, auth: e.auth }) });
+          nodes.push({ id: endpointId(e), kind: "endpoint", name: endpointId(e).slice(9), parent: `file:${s.file}`, path: s.file, range: s.decl.range, meta: clean({ method: e.method, path: e.path, framework: e.framework, auth: e.auth }) });
   }
   const edges: Edge[] = [...acc.values()].map(({ cond, count, at, ...e }) => ({
     ...e, ...(count > 1 && { count }),
-    at: at!.sort((a, b) => (`${a.path}\0${String(a.line).padStart(8, "0")}` < `${b.path}\0${String(b.line).padStart(8, "0")}` ? -1 : 1)).slice(0, 3),
+    at: at!.sort((a, b) => (`${a.path}\0${String(a.line).padStart(8, "0")}` < `${b.path}\0${String(b.line).padStart(8, "0")}` ? -1 : 1)).slice(0, 1),
     ...(e.kind === "renders" && cond && { meta: { conditional: true } }),
   }));
   return { nodes, edges, hidden };

@@ -15,7 +15,7 @@ export function applyTools(nodes: Node[], config: Config): { category: string; n
   const groups = new Map<string, string[]>();
   for (const n of nodes) {
     if (n.kind !== "external") continue;
-    const cat = mine[n.name] ?? categoryOf(String(n.meta?.ecosystem), n.name);
+    const cat = mine[n.name] ?? categoryOf(n.id.split(":")[1]!, n.name);
     n.meta = { ...n.meta, category: cat };
     (groups.get(cat) ?? groups.set(cat, []).get(cat)!).push(n.id);
   }

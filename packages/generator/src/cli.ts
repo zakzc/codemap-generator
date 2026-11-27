@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfig, scan } from "./scan.ts";
 import { validateCodemap, validateSharded } from "./validate.ts";
+import type { Diagnostic } from "./types.ts";
 import { serialize, writeAtomic, writeCodemap } from "./write.ts";
 
 // Default output: <project>/maps/<repo-name>/, next to packages/ (not inside the analysed repo)
@@ -35,14 +36,15 @@ if (cmd === "check" && target) {
   const file = `map-${basename(repo)}.json`;
   const t0 = performance.now();
   let doc;
-  try { const cfg = loadConfig(out); if (values.full) cfg.detail = { full: ["**"] }; doc = await scan(repo, cfg, { history: !values["no-history"], ...(!values["no-cache"] && { cacheDir: join(out, ".cache") }) }); } catch (e) { die(`scan failed: ${(e as Error).message}`); }
+  const diagnostics: Diagnostic[] = [];
+  try { const cfg = loadConfig(out); if (values.full) cfg.detail = { full: ["**"] }; doc = await scan(repo, cfg, { history: !values["no-history"], diagnostics, ...(!values["no-cache"] && { cacheDir: join(out, ".cache") }) }); } catch (e) { die(`scan failed: ${(e as Error).message}`); }
   const errors = validateCodemap(doc);
   if (errors.length) {
     writeAtomic(out, file.replace(".json", ".invalid.json"), serialize(doc!));
     die(`output failed validation (see ${join(out, file.replace(".json", ".invalid.json"))}):\n${errors.slice(0, 10).join("\n")}`, 1);
   }
   const { shards } = writeCodemap(out, doc!, undefined, file);
-  const warns = doc!.diagnostics.filter((d) => d.level !== "info");
+  const warns = diagnostics.filter((d) => d.level !== "info");
   console.log(`${doc!.project.name}: ${doc!.nodes.length} nodes, ${doc!.edges.length} edges, ${warns.length} warnings, ${((performance.now() - t0) / 1000).toFixed(1)} s${shards ? `, ${shards} shards` : ""}`);
   if (!values.quiet) for (const w of warns.slice(0, 10)) console.log(`  ${w.code} ${w.path ?? ""}${w.line ? `:${w.line}` : ""} ${w.message}`);
 } else if (cmd === "init" && target) {
@@ -58,6 +60,6 @@ if (cmd === "check" && target) {
     console.log(`wrote ${file}`);
   }
   console.log("auto features (copy the ones you want into `features`):");
-  for (const f of doc!.features.filter((f) => f.source !== "history")) console.log(`  ${f.id}  ${f.name}  (${f.members.length} members)`);
+  for (const f of doc!.features.filter((f) => f.members.some((m) => m.origin !== "history"))) console.log(`  ${f.id}  ${f.name}  (${f.members.length} members)`);
 }
 else die(USAGE);

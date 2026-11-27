@@ -1,6 +1,6 @@
 # Spec 2 — Codemap schema (`codemap/1`)
 
-Status: **v1.1** (2026-11-26) — all open questions decided (§13). v1.1 adds git history (§7.5): optional fields only, same `codemap/1` format. Part of a 3-spec series:
+Status: **v1.2** (2026-11-27) — all open questions decided (§13). v1.1 added git history (§7.5). v1.2 removes fields the visualiser never reads (§14); same `codemap/1` format, readers ignore unknown fields so older maps still load. Part of a 3-spec series:
 
 | Spec | What | Depends on |
 |---|---|---|
@@ -40,12 +40,12 @@ Files: [codemap.schema.json](../schema/codemap.schema.json) (machine-readable co
 |---|---|---|---|
 | Hierarchy | `parent` chain on nodes, dotted ids | `contains` edges + `layers` | **`parent` field** (cheaper than edges, one parent per node) |
 | Node kinds | 11 coarse kinds (`ui`, `service`, `data`…) | 27 kinds incl. design/knowledge | ~15 code-only kinds (§5.2) |
-| Edge kinds | 8 (`import`, `call`, `http`, `rpc`, `event`…) | 38 incl. semantic (`similar_to`) | 13 kinds: 12 from the code, plus `changes-with` from git history (§6.2) |
+| Edge kinds | 8 (`import`, `call`, `http`, `rpc`, `event`…) | 38 incl. semantic (`similar_to`) | 12 kinds, all from the code (§6.2) |
 | Features / flows | AI writes `flows`, `tour` | AI writes `layers`, `tour`, domains | **Rule-based features** from config, annotations, routes, stores, endpoints, keywords (§7) |
 | Cross-language links | matches `fetch()` calls to endpoints | — | `requests` edge: client call → endpoint node (§6.2) |
 | Who decides grouping | AI step | AI step | **Your `codemap.config.json`** plus heuristics |
 | Human input | AI-written `architecture.json`, editable | — | **Notes, manual edges and feature overrides** in config (§7.4) |
-| Incremental updates | per-file fingerprint | SHA-256 + signature diff | `hash` on file nodes (Spec 1 can skip unchanged files) |
+| Incremental updates | per-file fingerprint | SHA-256 + signature diff | None in the file: the generator hashes content in its own parse cache (Spec 1 §7) |
 | Confidence | "pattern matching, not a compiler" | weight 0–1 | `confidence: exact \| inferred \| heuristic \| manual` on every edge |
 | Large repos | not documented | batching, one big file | **Optional sharding + precomputed rollups** (§8) |
 
@@ -75,13 +75,10 @@ Codemaps live in a **folder outside the analysed repos**, one sub-folder per pro
 ```jsonc
 {
   "format": "codemap/1",           // major version; breaking change → codemap/2
-  "generator": { "name": "codemap", "version": "0.1.0", "generatedAt": "2026-11-26T10:00:00Z" },
   "project": {
     "name": "lettore",
-    "root": ".",                   // repo root; all paths are relative to it, POSIX "/"
     "remote": "git@github.com:me/lettore.git",  // optional, from git origin; helps find the repo on another machine
-    "commit": "a1b2c3d",           // null if not a git repo
-    "languages": ["typescript", "python", "rust"],
+    "commit": "a1b2c3d",           // null if not a git repo; the viewer compares it with the repo to flag a stale scan
     "entrypoints": ["file:src/main.tsx", "file:sidecar/main.py", "file:src-tauri/src/main.rs"]
   },
   "tools":    [ /* §7.1  libraries/services grouped by category */ ],
@@ -90,15 +87,14 @@ Codemaps live in a **folder outside the analysed repos**, one sub-folder per pro
   "edges":    [ /* §6 */ ],
   "rollups":  [ /* §8.2  aggregated edges between containers (sharded only, optional otherwise) */ ],
   "shards":   [ /* §8.1  present only in a sharded manifest */ ],
-  "history":  { /* §7.5  commits → files, from git log (optional) */ },
-  "diagnostics": [ /* §9  unresolved imports, parse errors, stale overrides */ ]
+  "history":  { /* §7.5  commits → files, from git log (optional) */ }
 }
 ```
 
 Rules:
 
 - Arrays are **sorted** (nodes by `id`, edges by `from`,`kind`,`to`) so output is stable and diff-friendly.
-- No absolute paths, user names or machine names anywhere in the file.
+- No absolute paths, user names or machine names anywhere in the file. All paths are relative to the repo root, POSIX `/`.
 - Unknown fields must be ignored by readers (forward compatibility). New optional fields = minor change, no format bump.
 - Omit empty/default fields (`tags: []`, `exported: false`) to save space; readers apply defaults.
 
@@ -114,13 +110,11 @@ Rules:
 | `parent` | id \| null | ✓ | Container. `null` only for the root `project` node |
 | `path` | string | | File/dir path. Symbols inherit their file's path |
 | `range` | `{start,end}` | | 1-based line range inside `path` |
-| `lang` | string | | `typescript`, `python`, `rust`, `swift`, `cpp`… |
 | `exported` | bool | | Visible outside its file/module |
 | `doc` | string | | First paragraph of the doc comment, verbatim, ≤ 300 chars |
 | `note` | string | | **Your** note from `codemap.config.json` (§7.4). Shown above `doc` |
-| `tags` | string[] | | Free labels: `test`, `generated`, `entry`, `lazy`, `hub` |
-| `metrics` | object | | `loc`, `fanIn`, `fanOut`, `children`, `hiddenSymbols`, `commits` (all integers; `commits` = commits that touched the file, §7.5) |
-| `hash` | string | | `sha256:<hex>` of file content (file nodes only) |
+| `tags` | string[] | | `entry`, `hub` |
+| `metrics` | object | | `loc`, `fanIn`, `fanOut`, `hiddenSymbols` (all integers; the viewer counts a container's rows from `parent`) |
 | `meta` | object | | Kind-specific detail (§5.4) |
 
 ### 5.2 Kinds
@@ -149,7 +143,7 @@ Goal: not every detail, but **never a partial view**. A file must never look sma
 
 **Always emitted**
 
-1. Every `package`, every `directory` that contains source files, and every source `file`. No source file is ever left out (only ignored globs and generated/vendor folders are skipped, and those are listed in `diagnostics` as `skipped-file`).
+1. Every `package`, every `directory` that contains source files, and every source `file`. No source file is ever left out (only ignored globs and generated/vendor folders are skipped, and the generator reports those on the console as `skipped-file`).
 2. Every node of a **structural kind**, exported or not: `component`, `hook`, `store`, `route`, `endpoint`, `command`, and top-level `class`.
 3. A `function` or `type` when it is exported, used from another file, an entrypoint (`main`, `@main`, `if __name__ == "__main__"`), or a test.
 
@@ -186,16 +180,14 @@ All optional. Readers must tolerate missing keys.
 
 | Kind | `meta` keys |
 |---|---|
-| `component` | `props: string[]`, `hooks: string[]` (names called), `lazy: bool` (`React.lazy`/dynamic import), `entryDepth: int` (render-tree distance from the root component, `-1` = never rendered), `conditional: bool` (only rendered inside a condition) |
-| `hook` | `hooks: string[]` |
-| `function` | `async: bool`, `params: string[]`, `overloads: int` |
+| `component` | `lazy: bool` (`React.lazy`/dynamic import), `conditional: bool` (only rendered inside a condition) |
 | `class` | `declaredAs: "class"\|"struct"\|"enum"\|"actor"\|"trait"\|"protocol"\|"interface"`, `methods: string[]` |
 | `store` | `framework: "redux"\|"zustand"\|"swiftui"\|…`, `actions: string[]`, `stateKeys: string[]` |
 | `endpoint` | `method`, `path`, `framework` (`fastapi`, `express`, `axum`…), `auth: bool` (dependency/middleware detected) |
 | `command` | `framework: "tauri"\|"electron"` |
 | `route` | `path`, `lazy: bool` |
-| `external` | `ecosystem: "npm"\|"pip"\|"cargo"\|"spm"\|"sys"\|"http"`, `version`, `category` (§7.1) |
-| `file` | `generated: bool`, `test: bool`, `lastChanged` (ISO date-time, UTC, of the last commit touching it, §7.5) |
+| `external` | `version`, `category` (§7.1). The ecosystem is the second part of the id (`ext:npm:react`) |
+| `file` | `generated: bool`, `test: bool` |
 
 ### 5.5 Language mapping
 
@@ -222,8 +214,8 @@ How each target language fills the same kinds. Detail belongs to Spec 1; this ta
 | `kind` | enum | ✓ | §6.2 |
 | `confidence` | enum | | `exact` (resolved by a parser, default), `inferred` (resolved by name through imports/aliases), `heuristic` (pattern/string match), `manual` (written by you in config) |
 | `count` | int | | Number of occurrences collapsed into this edge (default 1) |
-| `at` | `{path,line}`[] | | Up to 3 evidence locations (click → open file at line) |
-| `meta` | object | | `names: string[]` for imports, `typeOnly`, `dynamic`; `note` for manual edges |
+| `at` | `{path,line}`[] | | One evidence location, the first by path and line (click → open file at line). An array so a later version can hold more |
+| `meta` | object | | `dynamic` for imports, `conditional` for renders; `note` for manual edges |
 
 One edge per (`from`, `kind`, `to`). Repeats raise `count`.
 
@@ -243,7 +235,6 @@ One edge per (`from`, `kind`, `to`). Repeats raise `count`.
 | `tests` | test file → file | Test imports subject; filename convention |
 | `spawns` | file → package | Process/sidecar launch (`Command.sidecar`, `subprocess`) |
 | `configures` | asset/config → package/file | `tauri.conf.json` → sidecar, `vite.config.ts` |
-| `changes-with` | file → file | Git history: changed together in the same commits (§7.5). Undirected, stored once with `from` < `to`; `count` = shared commits |
 
 Containment is **not** an edge — it is `parent`.
 
@@ -252,8 +243,7 @@ Containment is **not** an edge — it is `parent`.
 - `imports`, `renders`, `routes`, `extends` → normally `exact`.
 - **`calls`, v1 rule (no type checker)**: from the syntax tree only. A call whose callee is a bare name that resolves to an imported symbol or a top-level symbol of the same file becomes a `calls` edge with `inferred`. Method calls (`obj.m()`), callbacks, function values and virtual/dynamic dispatch are skipped. If this proves noisy in testing, `calls` is dropped from v1; nothing else depends on it.
 - `requests` URL matching (`call("/parse")` → `endpoint:POST /parse`) → `heuristic`; the viewer shows these dashed. URLs built at run time can't be matched: add them as manual edges (§7.4).
-- `changes-with` (git co-change) → always `heuristic`: files that change together are often, not always, related.
-- Anything the script cannot resolve goes to `diagnostics`, never silently dropped.
+- Anything the script cannot resolve is reported on the console (§9), never silently dropped.
 
 ## 7. Tools, features, notes
 
@@ -280,8 +270,6 @@ A feature is a named set of nodes, each with a **role** and **distance**, so the
 {
   "id": "feature:document-loading",
   "name": "Document loading",
-  "source": "config",                // config | annotation | route | store | endpoint | command | keyword | history
-  "seeds": ["sym:src/App.tsx#App", "endpoint:POST /parse"],
   "members": [
     { "node": "sym:src/App.tsx#App",            "role": "entry",   "distance": 0 },
     { "node": "endpoint:POST /parse",           "role": "core",    "distance": 0 },
@@ -300,11 +288,11 @@ A feature is a named set of nodes, each with a **role** and **distance**, so the
 
 1. **Config** — `codemap.config.json` lists features with `seeds` (ids or globs) and optional `keywords`. The main mechanism.
 2. **Annotations** — a comment `@feature document-loading` in a file makes that file (or the next symbol) a seed.
-3. **Automatic** — one feature per `route`, `store`, `endpoint`, `command` (`source` = that kind). Gives useful features with zero config.
+3. **Automatic** — one feature per `route`, `store`, `endpoint`, `command`. Gives useful features with zero config.
 4. **Keyword** — identifiers/paths matching a feature's `keywords` (`load`, `pdf`, `parse`) become seeds with `heuristic` flavour.
 5. **History** — commits grouped by keyword, conventional-commit scope or reference (`#123`, `ABC-45`, your own patterns) add their files (§7.5).
 
-**Membership** = breadth-first walk from seeds over `imports`, `renders`, `calls`, `reads`, `writes`, `requests` edges (not `changes-with`), both directions, **max distance 2**. Stops expanding at **hub** nodes (**fan-in ≥ 10**, tagged `hub`, e.g. `api.ts`, `store.ts`) — hubs are included with role `shared` but not walked through, otherwise every feature would swallow the whole app. Both numbers are config settings and may be tuned after use tests.
+**Membership** = breadth-first walk from seeds over `imports`, `renders`, `calls`, `reads`, `writes`, `requests` edges, both directions, **max distance 2**. Stops expanding at **hub** nodes (**fan-in ≥ 10**, tagged `hub`, e.g. `api.ts`, `store.ts`) — hubs are included with role `shared` but not walked through, otherwise every feature would swallow the whole app. Both numbers are config settings and may be tuned after use tests.
 
 **Roles**
 
@@ -319,10 +307,9 @@ A feature is a named set of nodes, each with a **role** and **distance**, so the
 
 Answered from data already in the map, no extra section:
 
-- `meta.entryDepth` and `meta.lazy` / `meta.conditional` on the component.
+- `meta.lazy` / `meta.conditional` on the component.
 - The `renders` chain back to a root (the viewer walks `renders` edges in reverse to draw `main.tsx → App → PdfView`).
 - `reads`/`requests` edges from the component = what it needs before it can show data.
-- `meta.hooks` lists effects (`useEffect`) and data hooks.
 
 ### 7.4 Your notes and overrides
 
@@ -378,8 +365,6 @@ What the commit log says, read without AI (Spec 1 §4.7.1): commit subjects and 
 
 ```jsonc
 "history": {
-  "scanned": 6,                     // commits read (≤ maxCommits)
-  "truncated": false,               // true if maxCommits was reached or the clone is shallow
   "commits": [                      // newest first; only commits touching mapped files
     { "hash": "2784ec44a3a2", "date": "2026-11-25T10:06:18Z",
       "subject": "M4: first-run model download with progress; packaging status (SPEC §8 M4)",
@@ -392,9 +377,7 @@ What the commit log says, read without AI (Spec 1 §4.7.1): commit subjects and 
 | Where | What |
 |---|---|
 | `history.commits[]` | `hash` (12 hex chars), `date` (UTC), `subject` (first line, ≤ 200 chars), `files` (file ids under their **current** names, renames followed), `bulk` (too many files to say anything about how files relate; still counted) |
-| File `metrics.commits`, `meta.lastChanged` | How often and how recently a file changed |
-| `changes-with` edges | Files that usually change together (thresholds in Spec 1) |
-| Features | `source: "history"` features from scopes/references; `commits` on features and members; members with `origin: "history"` (§7.2) |
+| Features | features from scopes/references that exist only in history; `commits` (count) on members; members with `origin: "history"` (§7.2) |
 
 - **No author names or emails**, and no commit bodies: the file stays shareable (§4).
 - Files that aren't nodes (docs, images) are not listed. A commit with no mapped file is left out.
@@ -437,11 +420,7 @@ Emitted for `package` and `directory` pairs. Required in sharded mode; optional 
 
 ## 9. Diagnostics
 
-```jsonc
-"diagnostics": [
-  { "level": "warn", "code": "unresolved-import", "path": "src/x.ts", "line": 3, "message": "Cannot resolve './old'" }
-]
-```
+Diagnostics are **not stored in the file**: no screen shows them. The generator prints warnings on the console (`codemap <repo>`), up to 10 per run.
 
 Codes: `unresolved-import`, `parse-error`, `unmatched-request`, `ambiguous-symbol`, `skipped-file`, `stale-override`, `shallow-history`.
 
@@ -449,11 +428,10 @@ Codes: `unresolved-import`, `parse-error`, `unmatched-request`, `ambiguous-symbo
 
 1. `id`s are unique.
 2. Exactly one node has `parent: null`, and it is `kind: project`.
-3. Every `parent`, edge `from`/`to`, feature seed/member, tool node, rollup end and history commit file refers to an existing node (or, in sharded mode, to a node in a listed shard).
+3. Every `parent`, edge `from`/`to`, feature member, tool node, rollup end and history commit file refers to an existing node (or, in sharded mode, to a node in a listed shard).
 4. Following `parent` never loops.
 5. No two edges share (`from`, `kind`, `to`).
 6. Arrays are sorted as in §4 (`history.commits` newest first, then by hash).
-7. `changes-with` edges have `from` < `to`; every hash in a feature's `commits` is in `history.commits`.
 
 JSON Schema covers shapes; these cross-references need the script.
 
@@ -465,7 +443,7 @@ JSON Schema covers shapes; these cross-references need the script.
 
 ## 12. Example
 
-A trimmed but real map of the Lettore project: [examples/lettore.codemap.json](../examples/lettore.codemap.json). It shows a feature that crosses three languages (React `App` → `POST /parse` in the Python sidecar, with the Rust `sidecar_info` command providing the port), a private component kept by the detail rule (`PageView`), an edge lifted from a hidden helper to its file (`/geometry`), a user note, a manual edge (`WS /speak`), and git history from Lettore's real log (4 commits, `changes-with` between `sidecar/main.py` and `src/App.tsx`, feature `ref-m3-8`).
+A trimmed but real map of the Lettore project: [examples/lettore.codemap.json](../examples/lettore.codemap.json). It shows a feature that crosses three languages (React `App` → `POST /parse` in the Python sidecar, with the Rust `sidecar_info` command providing the port), a private component kept by the detail rule (`PageView`), an edge lifted from a hidden helper to its file (`/geometry`), a user note, a manual edge (`WS /speak`), and git history from Lettore's real log (4 commits, feature `ref-m3-8`).
 
 ## 13. Decisions (2026-11-26)
 
@@ -481,5 +459,24 @@ A trimmed but real map of the Lettore project: [examples/lettore.codemap.json](.
 | 8 | `calls` edges | No type-aware parser. Syntax-only rule (§6.3); dropped from v1 if noisy. |
 | 9 | Location | Central folder outside the repos, `~/Codemaps/<project>/` (§3). |
 | 10 | Generator language | Targets include TS/JS, Python, Rust, Swift, C++, not only React. So: one parser family for all, **tree-sitter**, with a small adapter per language (§5.5). Generator in **Node/TypeScript** using `web-tree-sitter` (WASM, no native build), sharing the codemap types with the Tauri viewer. |
-| 11 | Git history | Added on request (v1.1): commit subjects and changed files give `history`, `metrics.commits`, `changes-with` edges and commit-based features (§7.5). |
+| 11 | Git history | Added on request (v1.1): commit subjects and changed files give `history` and commit-based features (§7.5). v1.2 dropped `metrics.commits` and `changes-with` (§14). |
 
+## 14. Fields removed in v1.2
+
+The first visualiser (Spec 3) and its plan never read these, so the generator no longer writes them. They were about a third of a typical map.
+
+| Removed | Why |
+|---|---|
+| `changes-with` edges (and the `coChangeMin` setting) | Viewer dropped them at load |
+| `generator` block | Not used; also made two runs of the same commit differ |
+| `project.root`, `project.languages` | Paths are always relative to the root; languages are not shown |
+| `diagnostics` | No screen shows them; the console still prints warnings (§9) |
+| Node `hash` | Staleness is checked with `project.commit`, never per file |
+| Node `lang` | The source preview has no syntax colouring |
+| `metrics.children`, `metrics.commits` | Rows are counted from `parent`; commit counts are not shown |
+| `meta`: `hooks`, `props`, `params`, `async`, `entryDepth`, `ecosystem`, `lastChanged` | No feature reads them (`ecosystem` is in the id) |
+| Edge `meta.names`, `meta.typeOnly` | Imported names are never shown |
+| Feature `source`, `seeds`, `commits` | Features need only `name`, `description` and `members` |
+| `tags` other than `entry` and `hub` | Nothing uses them |
+| `at` beyond the first entry | "Open in editor" uses only `at[0]` |
+| `history.scanned`, `history.truncated` | Only worth keeping for a "history is limited" hint; add back with that screen |

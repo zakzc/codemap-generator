@@ -37,7 +37,6 @@ export function buildGraph({ projectName, files, facts, packages, config, resolv
     pkgDirs.add(".");
   }
   const pkgByDir = new Map(pkgs.map((p) => [p.dir, p]));
-  const languages = [...new Set(files.flatMap((f) => (f.lang ? [f.lang] : [])))].sort();
   add({ id: PROJECT, kind: "project", name: projectName, parent: null });
   for (const p of pkgs) add({ id: pkgId(p.dir), kind: "package", name: p.name || projectName, parent: PROJECT, path: p.dir });
 
@@ -62,8 +61,8 @@ export function buildGraph({ projectName, files, facts, packages, config, resolv
     fileIds.add(id);
     const tags = entryPaths.has(f.path) ? ["entry"] : undefined;
     add({
-      id, kind: f.lang ? "file" : "asset", name: posix.basename(f.path), parent, path: f.path, ...(f.lang && { lang: f.lang }),
-      ...(tags && { tags }), ...(f.hash && { hash: f.hash }),
+      id, kind: f.lang ? "file" : "asset", name: posix.basename(f.path), parent, path: f.path,
+      ...(tags && { tags }),
       ...(f.generated && { meta: { generated: true } }),
     });
   }
@@ -78,29 +77,27 @@ export function buildGraph({ projectName, files, facts, packages, config, resolv
     const pdir = packageOf(fx.path, pkgDirs);
     for (const imp of fx.imports) {
       const r = resolve(imp.spec, fx.path);
-      const targets: { to: string; names: string[] }[] = [];
+      const targets: string[] = [];
       if (r.kind === "unresolved" || (r.kind === "file" && !fileIds.has(`file:${r.path}`))) {
         diagnostics.push({ level: "warn", code: "unresolved-import", path: fx.path, line: imp.line, message: `Cannot resolve '${imp.spec}'` });
-      } else if (r.kind === "file") targets.push({ to: `file:${r.path}`, names: imp.names });
+      } else if (r.kind === "file") targets.push(`file:${r.path}`);
       else if (r.kind === "external") {
         const eco = r.eco ?? "npm";
         const to = `ext:${eco}:${r.name}`;
         if (!nodes.has(to)) {
           const version = pdir !== undefined ? pkgByDir.get(pdir)?.deps[eco]?.[r.name] : undefined;
-          add({ id: to, kind: "external", name: r.name, parent: PROJECT, meta: { ecosystem: eco, ...(version && { version }) } });
+          add({ id: to, kind: "external", name: r.name, parent: PROJECT, ...(version && { meta: { version } }) });
         }
-        targets.push({ to, names: imp.names });
+        targets.push(to);
       }
-      for (const m of submodules?.(imp.spec, fx.path, imp.names) ?? []) if (fileIds.has(`file:${m}`)) targets.push({ to: `file:${m}`, names: [] });
-      for (const { to, names } of targets) {
+      for (const m of submodules?.(imp.spec, fx.path, imp.names) ?? []) if (fileIds.has(`file:${m}`)) targets.push(`file:${m}`);
+      for (const to of targets) {
         if (to === from) continue;
         const key = `${from}\0imports\0${to}`;
-        const e = edges.get(key) ?? { from, to, kind: "imports", count: 0, at: [], meta: { names: [] as string[], typeOnly: true, dynamic: true } };
+        const e = edges.get(key) ?? { from, to, kind: "imports", count: 0, at: [], meta: { dynamic: true } };
         e.count!++;
         e.at!.push({ path: fx.path, line: imp.line });
-        const m = e.meta as { names: string[]; typeOnly: boolean; dynamic: boolean };
-        m.names.push(...names);
-        m.typeOnly &&= !!imp.typeOnly;
+        const m = e.meta as { dynamic: boolean };
         m.dynamic &&= !!imp.dynamic;
         edges.set(key, e);
         if (to.startsWith("file:")) {
@@ -111,9 +108,8 @@ export function buildGraph({ projectName, files, facts, packages, config, resolv
     }
   }
   for (const e of edges.values()) {
-    const m = e.meta as { names: string[]; typeOnly: boolean; dynamic: boolean };
-    e.at = e.at!.sort(by((a) => `${a.path}\0${String(a.line).padStart(8, "0")}`)).slice(0, 3);
-    e.meta = { ...(m.names.length && { names: [...new Set(m.names)].sort() }), ...(m.typeOnly && { typeOnly: true }), ...(m.dynamic && { dynamic: true }) };
+    e.at = e.at!.sort(by((a) => `${a.path}\0${String(a.line).padStart(8, "0")}`)).slice(0, 1);
+    e.meta = (e.meta as { dynamic: boolean }).dynamic ? { dynamic: true } : {};
     if (e.count === 1) delete e.count;
     if (!Object.keys(e.meta).length) delete e.meta;
   }
@@ -121,13 +117,11 @@ export function buildGraph({ projectName, files, facts, packages, config, resolv
   // symbols (components, hooks, stores, functions…) and their edges; detail rule applied inside
   const entryFiles = new Set([...entryPaths, ...(config.entrypoints ?? []).filter((id) => id.startsWith("file:")).map((id) => id.slice(5)), ...htmlEntrypoints(files), ...facts.filter((f) => f.entry).map((f) => f.path)]);
   const full = config.detail?.full ?? [];
-  const sym = buildSymbols({ facts, resolve, entryFiles, fullGlobs: full });
+  const sym = buildSymbols({ facts, resolve, fullGlobs: full });
   for (const n of sym.nodes) add(n);
   for (const e of entryFiles) { const n = nodes.get(`file:${e}`); if (n && n.kind === "file") n.tags = [...new Set([...(n.tags ?? []), "entry"])].sort(); }
 
   // metrics, hubs, entrypoints
-  const children = new Map<string, number>();
-  for (const n of nodes.values()) if (n.parent) children.set(n.parent, (children.get(n.parent) ?? 0) + 1);
   const hub = config.hubFanIn ?? 10;
   const entrypoints: string[] = [];
   for (const n of nodes.values()) {
@@ -139,7 +133,7 @@ export function buildGraph({ projectName, files, facts, packages, config, resolv
       if (Object.keys(m).length) n.metrics = m;
       if (m.fanIn! >= hub) n.tags = [...(n.tags ?? []), "hub"];
       if (n.tags?.includes("entry")) entrypoints.push(n.id);
-    } else if (n.kind !== "external") n.metrics = { children: children.get(n.id) ?? 0 };
+    }
   }
   for (const id of config.entrypoints ?? []) {
     if (nodes.has(id)) { entrypoints.push(id); const n = nodes.get(id)!; n.tags = [...new Set([...(n.tags ?? []), "entry"])].sort(); }
@@ -149,6 +143,6 @@ export function buildGraph({ projectName, files, facts, packages, config, resolv
   return {
     nodes: [...nodes.values()].sort(by((n) => n.id)),
     edges: [...edges.values(), ...sym.edges].sort(by((e) => `${e.from}\0${e.kind}\0${e.to}`)),
-    languages, entrypoints: [...new Set(entrypoints)].sort(), diagnostics,
+    entrypoints: [...new Set(entrypoints)].sort(), diagnostics,
   };
 }

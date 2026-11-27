@@ -1,6 +1,6 @@
 # Spec 1 — Codemap generator
 
-Status: **draft v0.3** (2026-11-26; v0.2 adds git history, §4.7.1; v0.3 records the decisions in §12). Produces files in the format of [Spec 2 v1.1](spec-2-codemap-schema.md); read by the viewer in [Spec 3](spec-3-visualiser.md).
+Status: **draft v0.4** (2026-11-27; v0.2 adds git history, §4.7.1; v0.3 records the decisions in §12; v0.4 stops writing fields the visualiser never reads, Spec 2 §14). Produces files in the format of [Spec 2 v1.2](spec-2-codemap-schema.md); read by the viewer in [Spec 3](spec-3-visualiser.md).
 
 Files: [codemap.config.schema.json](../schema/codemap.config.schema.json) (your config file's contract), [lettore.codemap.config.json](../examples/lettore.codemap.config.json) (example config).
 
@@ -37,7 +37,7 @@ codemap init <repo>
 
 Exit codes: `0` ok (warnings allowed), `1` output failed validation (nothing overwritten), `2` bad arguments or unreadable repo.
 
-Console output: one summary line (`lettore: 412 files, 1,830 nodes, 5,204 edges, 12 warnings, 3.1 s`) plus the first 10 warnings; all of them are in `diagnostics`.
+Console output: one summary line (`lettore: 412 files, 1,830 nodes, 5,204 edges, 12 warnings, 3.1 s`) plus the first 10 warnings. Diagnostics are console output only; they are not written to the codemap (Spec 2 §9).
 
 ## 3. Runtime and dependencies
 
@@ -65,7 +65,7 @@ Each stage is a pure function from the previous stage's data (except discover, p
 
 ### 4.1 Discover
 
-1. **Repo root and git**: `git rev-parse --show-toplevel`, `HEAD` commit, `git status --porcelain` (clean or dirty), `origin` URL.
+1. **Repo root and git**: `git rev-parse --show-toplevel`, `HEAD` commit, `origin` URL.
    - **The remote URL is sanitised**: user/password/token parts are removed (`https://user:tok@host/x.git` → `https://host/x.git`). Never written otherwise.
    - Not a git repo: allowed. `commit: null`, no remote.
 2. **Files**: `git ls-files --cached` (tracked files only, decision 3). Without git: walk the folder with default ignores.
@@ -94,9 +94,9 @@ Each language **adapter** turns one file into a plain `FileFacts` record. Adapte
 ```ts
 type FileFacts = {
   path: string; lang: string; hash: string; loc: number;
-  imports:  { spec: string; names: string[]; line: number; typeOnly?: boolean; dynamic?: boolean }[];
+  imports:  { spec: string; names: string[]; line: number; dynamic?: boolean }[];
   decls:    { name: string; kind: DeclKind; range: Range; exported: boolean; doc?: string;
-              parentDecl?: string; params?: string[]; async?: boolean; methods?: string[];
+              parentDecl?: string; methods?: string[];
               declaredAs?: string; decorators?: string[] }[];
   calls:    { callee: string; line: number; inDecl?: string; args: ArgFact[] }[];  // bare names and member calls
   jsx:      { name: string; line: number; inDecl?: string; conditional: boolean }[];
@@ -131,7 +131,7 @@ Detectors are small rule modules reading `FileFacts` + resolution results. Each 
 
 | Detector | Recognises | Emits |
 |---|---|---|
-| React | Capitalised function/arrow returning JSX, `class X extends Component`, `React.memo`/`forwardRef` wrappers, `React.lazy(() => import(...))` | `component` nodes (`props`, `hooks`, `lazy`), `renders` edges from JSX uses (`conditional` when inside `&&`, ternary, or `if`), `uses` edges to hooks |
+| React | Capitalised function/arrow returning JSX, `class X extends Component`, `React.memo`/`forwardRef` wrappers, `React.lazy(() => import(...))` | `component` nodes (`lazy`), `renders` edges from JSX uses (`conditional` when inside `&&`, ternary, or `if`), `uses` edges to hooks |
 | Hooks | `function useX` / `const useX =` | `hook` nodes |
 | Redux Toolkit | `createSlice({ name })`, `configureStore({ reducer: { key: slice.reducer } })`, `x.actions` aliases, `useSelector`/typed wrappers (`useAppSelector`), `dispatch(...)` | `store` nodes (`actions`, `stateKeys`); `reads` from selector lambdas `s => s.<key>` → slice registered under `<key>` (`heuristic` if the lambda is not that simple); `writes` from `dispatch(alias.action())` (`inferred`) |
 | Express | `app.<method>("/path", …)`, `router.<method>`, `app.use("/prefix", router)` | `endpoint` nodes with prefix joined |
@@ -147,7 +147,7 @@ Wrapper functions found by the Requests detector are listed in diagnostics at `i
 ### 4.6 Build graph and apply the detail rule
 
 1. Create nodes: project, packages, directories (only those with source files), files, assets, externals (only those actually imported), and every declaration/detector node.
-2. Create edges, merging duplicates (`count`), keeping the first 3 `at` locations sorted by path and line.
+2. Create edges, merging duplicates (`count`), keeping the first `at` location by path and line.
 3. **Detail rule** (Spec 2 §5.2.1): drop non-structural symbols that are private and used only in their own file; set `metrics.hiddenSymbols`; **re-attach** edges touching a dropped symbol to its file, merging duplicates again. `detail.full` paths and `--full` keep everything.
 4. Doc comments: first paragraph of JSDoc/TSDoc, Python docstring, Rust `///` or `//!`, trimmed to 300 characters.
 
@@ -168,11 +168,9 @@ Commit subjects and changed file lists, matched with plain text rules. No AI, no
    - Not a git repo → step skipped (`info`). Shallow clone → `shallow-history` diagnostic.
 2. **Renames**: walking newest → oldest, `R old new` maps `old` to the file's current path, so older commits count for the file as it is named today.
 3. **Only mapped files**: deleted files and files that are not nodes (README, SPEC.md, images, ignored folders) are dropped. A commit left with no mapped file is dropped.
-4. **Bulk commits**: more than `history.bulkFiles` (default 50) mapped files (formatting passes, mass renames, imports of old code) → kept and counted, flagged `bulk`, but not used for co-change or grouping.
+4. **Bulk commits**: more than `history.bulkFiles` (default 50) mapped files (formatting passes, mass renames, imports of old code) → kept and counted, flagged `bulk`, but not used for grouping.
 5. **Output** (Spec 2 §7.5):
    - `history.commits`: hash (12 chars), date (UTC), subject (≤ 200 chars), files, `bulk`. Newest first.
-   - File `metrics.commits` and `meta.lastChanged`.
-   - **`changes-with` edges**: two files changed together in ≥ `history.coChangeMin` (default 3) non-bulk commits **and** in at least half of the commits of the less-changed one. `count` = shared commits, `confidence: heuristic`, one edge per pair with `from` < `to`. Each file keeps its 10 strongest.
    - Features, from the grouping rules below.
 
 **Grouping commits into features** (literal matching only):
@@ -185,9 +183,9 @@ Commit subjects and changed file lists, matched with plain text rules. No AI, no
 
 A commit can match several rules and several features.
 
-**Members from commits**: each file of a feature's non-bulk commits joins with `origin: "history"`, `commits` = how many of those commits touched it, no `distance`. Role: `shared` if a hub, `core` if in at least half the feature's commits, else `support`. A file that is already a member (graph walk or you) keeps its role and distance and only gains `commits`. Features created here have `source: "history"`; every feature that matched commits lists them in `commits` (hashes, newest first).
+**Members from commits**: each file of a feature's non-bulk commits joins with `origin: "history"`, `commits` = how many of those commits touched it, no `distance`. Role: `shared` if a hub, `core` if in at least half the feature's commits, else `support`. A file that is already a member (graph walk or you) keeps its role and distance and only gains `commits`. 
 
-Lettore's subjects (`M3.8: blue underline on the sentence being read`) use milestone ids, not scopes or tickets: its config adds the pattern `\bM\d+(\.\d+)?\b`, which gives `feature:ref-m3-8` with `PdfView.tsx`, `player.ts`, `chunker.py`, `main.py` and `styles.css` as core and `store.ts` (a hub) as shared: the files that feature touched across TS and Python. The same history yields `sidecar/main.py changes-with src/App.tsx` (3 of 3 commits).
+Lettore's subjects (`M3.8: blue underline on the sentence being read`) use milestone ids, not scopes or tickets: its config adds the pattern `\bM\d+(\.\d+)?\b`, which gives `feature:ref-m3-8` with `PdfView.tsx`, `player.ts`, `chunker.py`, `main.py` and `styles.css` as core and `store.ts` (a hub) as shared: the files that feature touched across TS and Python.
 
 Every commit stays searchable by subject in `history.commits`, even when no rule groups it.
 
@@ -198,9 +196,8 @@ Merged after everything else, so they always win (Spec 2 §7.4): `notes` → `no
 ### 4.9 Tools, metrics, hubs
 
 - **Tools**: built-in registry `registry/tools.json` (package name or prefix → category, ~200 common packages across npm, PyPI, crates.io), overridden by config `tools`. Unknown packages → `other`.
-- **Metrics**: `loc` = lines in the file; `fanIn`/`fanOut` = distinct files importing / imported (externals excluded); `children` = child node count on containers.
+- **Metrics**: `loc` = lines in the file; `fanIn`/`fanOut` = distinct files importing / imported (externals excluded).
 - **Hubs**: files with `fanIn ≥ hubFanIn` get tag `hub`.
-- **Entry depth**: breadth-first over `renders` from the root components (components rendered in an entrypoint file, e.g. `createRoot(...).render(<App/>)`); unreachable components get `-1`.
 
 ### 4.10 Rollups and shards
 
@@ -209,11 +206,11 @@ Merged after everything else, so they always win (Spec 2 §7.4): `notes` → `no
 
 ### 4.11 Validate and write
 
-1. Sort nodes by `id` and edges by (`from`, `kind`, `to`); sort features, tools, rollups and diagnostics too.
+1. Sort nodes by `id` and edges by (`from`, `kind`, `to`); sort features, tools and rollups too.
 2. Validate against `codemap.schema.json` and the Spec 2 §10 invariants. **On failure**: write nothing over the previous codemap; write `map-<project>.invalid.json` next to it and exit `1`.
 3. Write each file to a temporary name, then rename, so a crash never leaves a half-written codemap.
 4. Layout: 2-space indent, **one node / edge / member per line** (as in the example), so git diffs show one line per change.
-5. **Determinism**: same repo state → byte-identical output. `generatedAt` is the `HEAD` commit time when the tree is clean, and the current time only when it is dirty or not a git repo.
+5. **Determinism**: same repo state → byte-identical output. The file carries no timestamp, so a dirty tree does not break it either.
 
 ## 5. Adapters (per language)
 
@@ -254,7 +251,7 @@ Lives in the codemap's out folder (`maps/<project>/`), never in the repo. Contra
 | `notes` | Node id → your note | `{}` |
 | `edges` | Manual edges (`from`, `to`, `kind`, `note`) | `[]` |
 | `tools` | Package → category | `{}` |
-| `history` | `enabled`, `maxCommits`, `bulkFiles`, `coChangeMin`, `refPatterns` (§4.7.1) | `true`, `100`, `50`, `3`, `["#\\d+", "\\b[A-Z][A-Z0-9]+-\\d+\\b"]` |
+| `history` | `enabled`, `maxCommits`, `bulkFiles`, `refPatterns` (§4.7.1) | `true`, `100`, `50`, `["#\\d+", "\\b[A-Z][A-Z0-9]+-\\d+\\b"]` |
 
 Plain JSON (no comments), so any tool can read and write it; the viewer may edit it later (Spec 3 Q3).
 
@@ -273,7 +270,7 @@ Plain JSON (no comments), so any tool can read and write it; the viewer may edit
 - One bad file never stops the run: parse errors, unreadable files, encoding problems → diagnostics.
 - Paths in the output are always repo-relative POSIX; absolute paths are rejected by the writer (assert).
 - Remote URL credentials are stripped (§4.1).
-- Git is only asked to list (`log`, `ls-files`, `rev-parse`, `status`), with external diff and text-conversion drivers off, so no repo-configured program runs. No author names or emails are read.
+- Git is only asked to list (`log`, `ls-files`, `rev-parse`, `remote`), with external diff and text-conversion drivers off, so no repo-configured program runs. No author names or emails are read.
 
 ## 9. Source layout
 
@@ -288,7 +285,7 @@ code-reader/
       src/lang/       typescript.ts, python.ts, rust.ts
       src/detect/     react.ts, redux.ts, express.ts, fastapi.ts, axum.ts, tauri.ts, requests.ts, tests.ts, annotations.ts
       src/graph/      build.ts, detail.ts, features.ts, overrides.ts, metrics.ts, rollups.ts, shards.ts
-      src/history/    gitlog.ts (read + renames), history.ts (metrics, changes-with, grouping)
+      src/history/    gitlog.ts (read + renames), history.ts (metrics, grouping)
       src/write.ts
       registry/tools.json
       test/fixtures/  ts-react-redux/, python-fastapi/, rust-tauri/, lettore-like/, git-history/ (scripted commits)
@@ -307,7 +304,7 @@ code-reader/
 | Validation | Every golden output passes the JSON Schema (ajv) and the §10 invariants |
 | Determinism | Two runs → identical bytes; shuffled file order → identical bytes |
 | Incremental | Change one file → only that file is re-parsed; output equals a `--no-cache` run |
-| History | Scripted repo: renames followed, docs-only and deleted files dropped, bulk commit excluded from co-change, `changes-with` threshold, scope/ref/keyword grouping, member roles, no author data in output, same `HEAD` → same bytes |
+| History | Scripted repo: renames followed, docs-only and deleted files dropped, bulk commit excluded from grouping, scope/ref/keyword grouping, member roles, no author data in output, same `HEAD` → same bytes |
 | Overrides | Notes, manual edges, include/exclude/roles applied; unknown id → `stale-override` |
 | Safety | Remote URL with a token is sanitised; no absolute paths in output; symlink outside the repo is not followed |
 | Performance | A generated 1,500-file fixture: cold < 10 s, warm < 2 s (reported, fails above 2× the target) |
@@ -317,7 +314,7 @@ code-reader/
 Each ends with a run on Lettore and a passing `check`.
 
 1. **M1 Skeleton**: CLI, discover, packages, TS/JS imports, file/dir/package/external nodes, validate + write. Lettore's file tree and imports visible.
-2. **M2 TS symbols**: decls, detail rule, React components/hooks/renders, Redux stores/reads/writes, entry depth.
+2. **M2 TS symbols**: decls, detail rule, React components/hooks/renders, Redux stores/reads/writes.
 3. **M3 Python**: adapter, resolver, FastAPI/Flask endpoints.
 4. **M4 Rust + bridges**: adapter, resolver, Tauri commands/sidecars, axum, request matching with wrapper detection. *Skipped for now (2026-11-26): few Rust apps. Request matching is the part that links TS calls to Python endpoints.*
 5. **M5 Features and you**: features, annotations, git history (§4.7.1), config overrides, tools registry, `init`.
@@ -330,10 +327,11 @@ Each ends with a run on Lettore and a passing `check`.
 | 1 | Repo layout | One repo holding `schema`, `generator` and `viewer` packages (§9). |
 | 2 | Standard libraries | Dropped entirely (less noise). |
 | 3 | Untracked files | Not included: tracked files only (§4.1). Outside git, the folder is walked. |
-| 4 | `generatedAt` | Commit time when clean, current time when dirty (§4.11). |
+| 4 | `generatedAt` | ~~Commit time when clean~~ Removed in v0.4: the `generator` block is not written (Spec 2 §14). |
 | 5 | `init` | Kept in v1: the tool writes the starter config for you (§2), so you edit instead of writing from scratch. |
 | 6 | Lettore as a fixture | A trimmed copy goes into the test fixtures (§10). |
 | 7 | History depth | Last **100** commits (`history.maxCommits` default, §4.7.1, §6). |
 | 8 | Commit bodies | Subjects and changed files only (§4.7.1). The goal is to map functionality to components. |
 | 9 | Symbol-level history | No changed lines. Commits map to files; the components and functions declared in a changed file are reached through containment (`parent`). |
 | 10 | Lettore's milestone ids | Pattern stays in Lettore's config, not in the default `refPatterns`. |
+| 11 | Unused fields (2026-11-27) | Fields no visualiser screen reads are no longer written: `changes-with` edges and `coChangeMin`, `generator`, `project.root`/`languages`, `diagnostics` (console only), node `hash`/`lang`, `metrics.children`/`commits`, several `meta` keys, edge `names`/`typeOnly`, feature `source`/`seeds`/`commits`, extra `at` entries, `history.scanned`/`truncated`. Full list in Spec 2 §14. Per-file hashes stay in the parse cache. |

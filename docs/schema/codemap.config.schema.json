@@ -66,7 +66,7 @@
         "properties": {
           "from": { "$ref": "#/$defs/id" },
           "to": { "$ref": "#/$defs/id" },
-          "kind": { "enum": ["imports", "renders", "calls", "uses", "reads", "writes", "requests", "routes", "extends", "tests", "spawns", "configures", "changes-with"] },
+          "kind": { "enum": ["imports", "renders", "calls", "uses", "reads", "writes", "requests", "routes", "extends", "tests", "spawns", "configures"] },
           "note": { "type": "string" }
         }
       }
@@ -78,8 +78,7 @@
       "properties": {
         "enabled": { "type": "boolean", "default": true },
         "maxCommits": { "type": "integer", "minimum": 1, "default": 100 },
-        "bulkFiles": { "type": "integer", "minimum": 1, "default": 50, "description": "Commits with more mapped files are not used for co-change or grouping" },
-        "coChangeMin": { "type": "integer", "minimum": 1, "default": 3 },
+        "bulkFiles": { "type": "integer", "minimum": 1, "default": 50, "description": "Commits with more mapped files are not used for grouping" },
         "refPatterns": { "type": "array", "items": { "type": "string" }, "description": "Regexes matched in commit subjects; each match groups commits into feature:ref-<slug>. Default: issue #123 and tracker keys ABC-45" }
       }
     },

@@ -9,14 +9,12 @@ import { applyOverrides } from "./graph/overrides.ts";
 import { buildRollups } from "./graph/rollups.ts";
 import { applyTools } from "./graph/tools.ts";
 import { isShallow, readLogCached } from "./history/gitlog.ts";
-import { changesWith, groupCommits, mapCommits, HISTORY_DEFAULTS } from "./history/history.ts";
+import { groupCommits, mapCommits, HISTORY_DEFAULTS } from "./history/history.ts";
 import { parseWithCache, type Stats } from "./parse/cache.ts";
 import { resolvePython, pythonSubmodules, type PyCtx } from "./resolve/python.ts";
 import { makeResolver } from "./resolve/typescript.ts";
 import { validateConfig } from "./validate.ts";
 import type { Config, Diagnostic } from "./types.ts";
-
-export const VERSION = "0.1.0";
 
 export function loadConfig(outDir: string): Config {
   const file = join(outDir, "codemap.config.json");
@@ -27,7 +25,7 @@ export function loadConfig(outDir: string): Config {
 }
 
 /** Pure-ish pipeline: discover → parse → resolve → graph. Returns the unwritten document. */
-export async function scan(repo: string, config: Config = {}, opts: { history?: boolean; cacheDir?: string; workers?: number; stats?: Stats } = {}) {
+export async function scan(repo: string, config: Config = {}, opts: { history?: boolean; cacheDir?: string; workers?: number; stats?: Stats; diagnostics?: Diagnostic[] } = {}) {
   const git = gitInfo(repo);
   const root = git?.root ?? repo;
   const projectName = config.project ?? basename(root);
@@ -54,7 +52,7 @@ export async function scan(repo: string, config: Config = {}, opts: { history?: 
   // git history: commits → files, co-change, commit-based features (Spec 1 §4.7.1)
   const hcfg = { ...HISTORY_DEFAULTS, ...(config.history as object | undefined) };
   const useHistory = opts.history !== false && (config.history as { enabled?: boolean } | undefined)?.enabled !== false;
-  let history: { scanned: number; truncated: boolean; commits: ReturnType<typeof mapCommits> } | undefined;
+  let history: { commits: ReturnType<typeof mapCommits> } | undefined;
   let groups: ReturnType<typeof groupCommits> = [];
   if (!git || !useHistory) diagnostics.push({ level: "info", code: "skipped-file", message: `History skipped: ${!git ? "not a git repo" : "disabled"}` });
   else {
@@ -64,14 +62,7 @@ export async function scan(repo: string, config: Config = {}, opts: { history?: 
     else {
       if (shallow) diagnostics.push({ level: "warn", code: "shallow-history", message: "Shallow clone: history is incomplete" });
       const commits = mapCommits(log, new Set(nodes.filter((n) => n.kind === "file" || n.kind === "asset").map((n) => n.id)), hcfg);
-      history = { scanned: log.length, truncated: shallow || log.length >= hcfg.maxCommits, commits };
-      const stats = new Map<string, { n: number; last: string }>();
-      for (const c of commits) for (const f of c.files) { const s = stats.get(f); if (s) s.n++; else stats.set(f, { n: 1, last: c.date }); } // newest first
-      for (const n of nodes) {
-        const s = stats.get(n.id);
-        if (s) { n.metrics = { ...n.metrics, commits: s.n }; n.meta = { ...n.meta, lastChanged: s.last }; }
-      }
-      edges = [...edges, ...changesWith(commits, hcfg)];
+      history = { commits };
       groups = groupCommits(commits, ((config.features as { id: string; keywords?: string[] }[] | undefined) ?? []), hcfg);
     }
   }
@@ -85,11 +76,10 @@ export async function scan(repo: string, config: Config = {}, opts: { history?: 
   const key = (d: (typeof diagnostics)[number]) => `${d.path ?? ""}\0${String(d.line ?? 0).padStart(8, "0")}\0${d.code}\0${d.message}`;
   diagnostics.sort((a, b) => (key(a) < key(b) ? -1 : 1));
   edges.sort((a, b) => { const x = `${a.from}\0${a.kind}\0${a.to}`, y = `${b.from}\0${b.kind}\0${b.to}`; return x < y ? -1 : x > y ? 1 : 0; });
-  const dirty = !git || git.dirty || !git.commitDate;
+  opts.diagnostics?.push(...diagnostics);
   return {
     format: "codemap/1",
-    generator: { name: "codemap", version: VERSION, generatedAt: new Date(dirty ? Date.now() : git!.commitDate!).toISOString().replace(/\.\d+Z$/, "Z") },
-    project: { name: projectName, root: ".", ...(git?.remote && { remote: git.remote }), commit: git?.commit ?? null, languages: g.languages, entrypoints: g.entrypoints },
-    tools, features, nodes, edges, rollups: buildRollups(nodes, edges), ...(history && { history }), diagnostics,
+    project: { name: projectName, ...(git?.remote && { remote: git.remote }), commit: git?.commit ?? null, entrypoints: g.entrypoints },
+    tools, features, nodes, edges, rollups: buildRollups(nodes, edges), ...(history && { history }),
   };
 }
