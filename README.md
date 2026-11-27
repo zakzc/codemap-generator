@@ -19,21 +19,41 @@ You do this once.
 
 **Requirements**
 
-| Need | Why |
-|---|---|
-| Node.js **22.18 or newer** (developed on 26) | Runs the TypeScript sources directly, no build step |
-| git on your `PATH` | File listing and history. Repos without git also work, without history |
+| Need | Check with | Why |
+|---|---|---|
+| Node.js **22.18 or newer** (developed on 26) | `node -v` | Runs the TypeScript sources directly, no build step |
+| git on your `PATH` | `git --version` | File listing and history. Repos without git also work, without history |
 
 **Steps**
 
-```bash
-cd packages/generator
-npm install          # installs the dependencies
-npm test             # optional: runs the test suite (18 tests, about 3 s)
-npm link             # optional: installs the `codemap` command globally
-```
+1. Get the code and enter the project root:
 
-`npm link` is what lets you type `codemap <repo>` from any folder. Without it, use the npm script described in section 2.
+   ```bash
+   git clone https://github.com/zakzc/codemap-generator.git
+   cd codemap-generator
+   ```
+
+2. Install the dependencies (note: inside `packages/generator`, not the root):
+
+   ```bash
+   cd packages/generator
+   npm install
+   ```
+
+3. Verify the install (optional, about 3 s, should report all tests passing):
+
+   ```bash
+   npm test
+   ```
+
+4. Make the `codemap` command available everywhere (optional):
+
+   ```bash
+   npm link
+   cd ../..
+   ```
+
+   Without this step, use the `npm run codemap` form shown in section 2.
 
 ---
 
@@ -43,23 +63,28 @@ You do this every time you want a codemap.
 
 ### Quick start
 
-```bash
-codemap /path/to/your/repo
-```
+Pick one form. Replace `/path/to/your/repo` with the repo you want to map.
 
-or, without `npm link`, from the project root:
+| Form | Run from | Command |
+|---|---|---|
+| Global command (needs step 4 above) | any folder | `codemap /path/to/your/repo` |
+| npm script | the project root (`codemap-generator/`) | `npm run codemap /path/to/your/repo` |
 
-```bash
-npm run codemap /path/to/your/repo
-```
-
-Either way the result is written to `maps/<repo-name>/map-<repo-name>.json`, and a summary line is printed:
+The result is always written to `maps/<repo-name>/map-<repo-name>.json` in the project root, whichever folder you run from, and a summary line is printed:
 
 ```
 lettore: 122 nodes, 163 edges, 0 warnings, 0.3 s
 ```
 
+Then check it (optional):
+
+```bash
+codemap check <project-root>/maps/<repo-name>/map-<repo-name>.json
+```
+
 Run it again whenever the code changes. Runs are incremental: unchanged files are not re-parsed (a 1,500-file repo takes about 0.6 s cold and 0.2 s warm).
+
+Optional first-time setup for a repo, to add your own features and notes: run `codemap init /path/to/your/repo`, edit the generated `maps/<repo-name>/codemap.config.json`, then scan again.
 
 ### Commands
 
