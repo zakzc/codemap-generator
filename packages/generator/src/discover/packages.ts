@@ -1,5 +1,4 @@
 import { posix } from "node:path";
-import { parse as parseToml } from "smol-toml";
 import type { Diagnostic } from "../types.ts";
 import type { SourceFile } from "./files.ts";
 
@@ -14,7 +13,10 @@ const rel = (dir: string, p: string) => posix.normalize(posix.join(dir, p));
 const reqName = (s: string) => s.trim().match(/^[A-Za-z0-9][A-Za-z0-9._-]*/)?.[0]?.toLowerCase();
 
 /** One package per manifest folder; several manifests in one folder merge into one package. */
-export function findPackages(files: SourceFile[], diagnostics: Diagnostic[]): Pkg[] {
+export async function findPackages(files: SourceFile[], diagnostics: Diagnostic[]): Promise<Pkg[]> {
+  // Loaded only when a TOML manifest exists, so TS/JS-only repos do not need smol-toml.
+  let toml: typeof import("smol-toml") | undefined;
+  const parseToml = async (s: string) => (toml ??= await import("smol-toml")).parse(s);
   const byDir = new Map<string, Pkg>();
   const paths = new Set(files.map((f) => f.path));
   const warn = (path: string, e: unknown) => diagnostics.push({ level: "warn", code: "parse-error", path, message: `Cannot read manifest: ${(e as Error).message}` });
@@ -34,13 +36,13 @@ export function findPackages(files: SourceFile[], diagnostics: Diagnostic[]): Pk
         for (const k of ["dependencies", "devDependencies", "peerDependencies"]) Object.assign(deps, j[k]);
         for (const e of [j.main, j.module, ...(typeof j.bin === "string" ? [j.bin] : Object.values(j.bin ?? {}))]) if (typeof e === "string") entry.push(rel(dir, e));
       } else if (base === "Cargo.toml") {
-        const t = parseToml(f.content) as any;
+        const t = (await parseToml(f.content)) as any;
         if (!t.package) continue; // workspace-only manifest
         eco = "cargo"; name = t.package.name;
         for (const k of ["dependencies", "dev-dependencies"]) for (const [d, v] of Object.entries(t[k] ?? {})) deps[d] = typeof v === "string" ? v : (v as any)?.version ?? "";
         entry.push(rel(dir, "src/main.rs"), ...(t.bin ?? []).map((b: any) => rel(dir, b.path ?? `src/bin/${b.name}.rs`)));
       } else if (base === "pyproject.toml") {
-        const t = parseToml(f.content) as any;
+        const t = (await parseToml(f.content)) as any;
         eco = "pip"; name = t.project?.name ?? t.tool?.poetry?.name;
         for (const r of t.project?.dependencies ?? []) { const n = reqName(r); if (n) deps[n] = ""; }
         // `[project.scripts] cli = "pkg.mod:func"` → the module's file

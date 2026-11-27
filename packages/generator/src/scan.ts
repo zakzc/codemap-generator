@@ -31,7 +31,7 @@ export async function scan(repo: string, config: Config = {}, opts: { history?: 
   const projectName = config.project ?? basename(root);
   const { files, diagnostics: d1 } = discoverFiles(root, !!git, config.ignore);
   const d2: Diagnostic[] = [];
-  const packages = findPackages(files, d2);
+  const packages = await findPackages(files, d2);
   const facts = await parseWithCache(files, opts);
   const content = new Map(files.map((f) => [f.path, f.content]));
   const paths = new Set(content.keys());
